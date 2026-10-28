@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>STMA Controller — Mobile First Trading Dashboard</title>
+  <meta name="description" content="Smart Trade Multi Account operator dashboard — mobile-first multi-account MetaTrader 5 controller & monitoring.">
+  <meta name="theme-color" content="#07070d">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Top Mobile-Friendly Header -->
+  <header class="app-header">
+    <div class="header-left">
+      <div class="brand-logo" id="brandLogo">
+        <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+          <polygon points="14,2 26,8 26,20 14,26 2,20 2,8" fill="none" stroke="url(#hexGrad)" stroke-width="2.2"/>
+          <polygon points="14,7 21,11 21,17 14,21 7,17 7,11" fill="url(#hexGrad)" opacity="0.35"/>
+          <circle cx="14" cy="14" r="3.2" fill="url(#hexGrad)"/>
+          <defs>
+            <linearGradient id="hexGrad" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="#6366f1"/>
+              <stop offset="100%" stop-color="#06b6d4"/>
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+      <div class="brand-title">
+        <div class="brand-name">STMA <span class="brand-version">v1.0</span></div>
+        <div class="brand-status-row">
+          <span class="env-pill" id="envBadge">DEMO</span>
+          <div class="conn-pill" id="connPill">
+            <span class="conn-dot" id="connDot"></span>
+            <span class="conn-text" id="connLabel">Connecting</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <div class="header-time" id="headerTime">--:--:-- UTC</div>
+      <button class="icon-btn" id="refreshBtn" onclick="manualRefresh()" title="Refresh Data" aria-label="Refresh">
+        <svg class="spin-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- Quick Metrics Bar (Always Visible on Mobile & Desktop) -->
+  <section class="metrics-bar">
+    <div class="metric-chip">
+      <span class="chip-label">Strategy</span>
+      <span class="chip-val status-active" id="barStrategy">Active</span>
+    </div>
+    <div class="metric-chip">
+      <span class="chip-label">Protection</span>
+      <span class="chip-val" id="barProtection">Normal</span>
+    </div>
+    <div class="metric-chip">
+      <span class="chip-label">Active Cycles</span>
+      <span class="chip-val highlight" id="barCycles">0</span>
+    </div>
+    <div class="metric-chip">
+      <span class="chip-label">Open Pos</span>
+      <span class="chip-val highlight" id="barPositions">0</span>
+    </div>
+  </section>
+
+  <!-- Desktop Tab Switcher (Optional Quick Nav on Tablet/Desktop) -->
+  <nav class="desktop-tabs-nav" aria-label="Desktop Navigation">
+    <button class="nav-tab active" data-tab="tab-overview" onclick="switchTab('tab-overview')">Overview</button>
+    <button class="nav-tab" data-tab="tab-accounts" onclick="switchTab('tab-accounts')">Accounts <span class="badge" id="navAccBadge">3</span></button>
+    <button class="nav-tab" data-tab="tab-trades" onclick="switchTab('tab-trades')">Trades & Cycles <span class="badge" id="navTradeBadge">0</span></button>
+    <button class="nav-tab" data-tab="tab-logs" onclick="switchTab('tab-logs')">Commands & Logs</button>
+    <button class="nav-tab" data-tab="tab-controls" onclick="switchTab('tab-controls')">Controls</button>
+  </nav>
+
+  <!-- Main Scrollable App Container -->
+  <main class="app-content">
+    
+    <!-- TAB 1: OVERVIEW -->
+    <div class="tab-pane active" id="tab-overview">
+      <!-- System Summary Card -->
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">⚡</span>
+            <span class="head-title">System Status</span>
+          </div>
+          <span class="card-tag" id="summaryModeTag">DEMO MODE</span>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-box">
+            <span class="box-label">Environment</span>
+            <span class="box-value" id="stateEnv">—</span>
+          </div>
+          <div class="summary-box">
+            <span class="box-label">Live Trading</span>
+            <span class="box-value" id="stateLive">—</span>
+          </div>
+          <div class="summary-box">
+            <span class="box-label">Risk Protection</span>
+            <span class="box-value" id="stateProtection">—</span>
+          </div>
+          <div class="summary-box">
+            <span class="box-label">Active Cycles</span>
+            <span class="box-value highlight" id="stateCycles">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Action Buttons on Overview -->
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">🎮</span>
+            <span class="head-title">Quick Controls</span>
+          </div>
+        </div>
+        <div class="quick-actions-grid">
+          <button class="q-btn q-btn--pause" onclick="pauseEntries()">
+            <span class="q-icon">⏸</span>
+            <span>Pause Entries</span>
+          </button>
+          <button class="q-btn q-btn--resume" onclick="resumeStrategy()">
+            <span class="q-icon">▶</span>
+            <span>Resume Strategy</span>
+          </button>
+          <button class="q-btn q-btn--emergency" onclick="emergencyProtection()">
+            <span class="q-icon">🛡️</span>
+            <span>Emergency Stop</span>
+          </button>
+          <button class="q-btn q-btn--resume-crit" onclick="resumeAfterCritical()">
+            <span class="q-icon">✓</span>
+            <span>Resume After Critical</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Account Summary Preview -->
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">🏦</span>
+            <span class="head-title">Connected Accounts</span>
+          </div>
+          <button class="link-btn" onclick="switchTab('tab-accounts')">View All →</button>
+        </div>
+        <div id="overviewAccountsList" class="accounts-summary-container">
+          <div class="loading-state">Loading accounts...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: ACCOUNTS -->
+    <div class="tab-pane" id="tab-accounts">
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">🏦</span>
+            <span class="head-title">MT5 Account Instances</span>
+          </div>
+          <span class="card-tag tag-cyan">3 Accounts Managed</span>
+        </div>
+        <div class="card-subtext">Status langsung dari EA yang terpasang di masing-masing MetaTrader 5 terminal.</div>
+        <div id="accountsList" class="accounts-cards-grid">
+          <div class="loading-state">Memuat data akun...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: TRADES & CYCLES -->
+    <div class="tab-pane" id="tab-trades">
+      <!-- Active Cycles Section -->
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">🔄</span>
+            <span class="head-title">Active Cycles</span>
+          </div>
+          <span class="count-badge" id="cycleCount">0</span>
+        </div>
+        <div id="cyclesList" class="cycles-container">
+          <div class="empty-state">Tidak ada siklus aktif saat ini</div>
+        </div>
+      </div>
+
+      <!-- Open Positions Section -->
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">📈</span>
+            <span class="head-title">Open Positions</span>
+          </div>
+          <span class="count-badge" id="posCount">0</span>
+        </div>
+        <div id="positionsList" class="positions-container">
+          <div class="empty-state">Tidak ada posisi terbuka</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 4: COMMANDS & LOGS -->
+    <div class="tab-pane" id="tab-logs">
+      <!-- Filter Chips -->
+      <div class="log-filter-chips">
+        <button class="chip-filter active" onclick="filterLogs('all')">All</button>
+        <button class="chip-filter" onclick="filterLogs('commands')">Commands</button>
+        <button class="chip-filter" onclick="filterLogs('risks')">Risk Events (<span id="riskCount">0</span>)</button>
+        <button class="chip-filter" onclick="filterLogs('systems')">System Events</button>
+      </div>
+
+      <!-- Commands Panel -->
+      <div class="mobile-card log-panel-section" id="secCommands">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">📋</span>
+            <span class="head-title">Recent EA Commands</span>
+          </div>
+        </div>
+        <div id="commandsList" class="log-items-list">
+          <div class="loading-state">Memuat riwayat perintah...</div>
+        </div>
+      </div>
+
+      <!-- Risk Events Panel -->
+      <div class="mobile-card log-panel-section" id="secRisks">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">⚠️</span>
+            <span class="head-title">Active Risk Events</span>
+          </div>
+          <span class="count-badge badge-danger" id="riskBadge">0</span>
+        </div>
+        <div id="riskEventsList" class="log-items-list">
+          <div class="empty-state">Tidak ada risk event aktif ✓</div>
+        </div>
+      </div>
+
+      <!-- System Events Panel -->
+      <div class="mobile-card log-panel-section" id="secSystems">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">⚙️</span>
+            <span class="head-title">System Connectivity Events</span>
+          </div>
+        </div>
+        <div id="systemEventsList" class="log-items-list">
+          <div class="loading-state">Memuat riwayat sistem...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 5: CONTROLS & SETTINGS -->
+    <div class="tab-pane" id="tab-controls">
+      <!-- Consequential Trading Controls -->
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">🎮</span>
+            <span class="head-title">Manual Execution Controls</span>
+          </div>
+        </div>
+        <div class="control-action-list">
+          <div class="control-row">
+            <div class="control-info">
+              <div class="ctrl-name">Pause New Entries</div>
+              <div class="ctrl-desc">Menghentikan penerimaan sinyal baru. Posisi terbuka tetap terkelola.</div>
+            </div>
+            <button class="action-btn btn-warning" onclick="pauseEntries()">Pause</button>
+          </div>
+
+          <div class="control-row">
+            <div class="control-info">
+              <div class="ctrl-name">Resume Strategy</div>
+              <div class="ctrl-desc">Mengaktifkan kembali penerimaan sinyal dan entry normal.</div>
+            </div>
+            <button class="action-btn btn-success" onclick="resumeStrategy()">Resume</button>
+          </div>
+
+          <div class="control-row">
+            <div class="control-info">
+              <div class="ctrl-name danger-text">Emergency Stop Protection</div>
+              <div class="ctrl-desc">Segera blokir semua entry baru dan aktifkan status proteksi darurat.</div>
+            </div>
+            <button class="action-btn btn-danger" onclick="emergencyProtection()">Stop</button>
+          </div>
+
+          <div class="control-row">
+            <div class="control-info">
+              <div class="ctrl-name">Resume After Critical</div>
+              <div class="ctrl-desc">Reset status darurat setelah peninjauan risiko selesai.</div>
+            </div>
+            <button class="action-btn btn-info" onclick="resumeAfterCritical()">Reset</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Server & Connection Settings -->
+      <div class="mobile-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">🌐</span>
+            <span class="head-title">Server Connection & Auth</span>
+          </div>
+        </div>
+        <div class="settings-form">
+          <div class="input-group">
+            <label for="serverUrlInput">Controller API Base URL</label>
+            <input type="text" id="serverUrlInput" placeholder="http://127.0.0.1:8000" spellcheck="false">
+            <small class="input-hint">Otomatis mendeteksi host server saat dibuka melalui browser jaringan/VPS.</small>
+          </div>
+
+          <div class="input-group">
+            <label for="authTokenInput">Operator Auth Token (X-Auth-Token)</label>
+            <input type="password" id="authTokenInput" placeholder="KunciAmanSTMA2026" spellcheck="false">
+          </div>
+
+          <button class="action-btn btn-primary full-width" onclick="saveSettings()">Simpan Konfigurasi</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- Mobile Bottom Tab Bar (Thumbs-friendly) -->
+  <nav class="bottom-tab-bar" aria-label="Mobile Navigation">
+    <button class="tab-btn active" data-tab="tab-overview" onclick="switchTab('tab-overview')">
+      <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <rect x="3" y="3" width="7" height="7"></rect>
+        <rect x="14" y="3" width="7" height="7"></rect>
+        <rect x="14" y="14" width="7" height="7"></rect>
+        <rect x="3" y="14" width="7" height="7"></rect>
+      </svg>
+      <span class="tab-label">Overview</span>
+    </button>
+
+    <button class="tab-btn" data-tab="tab-accounts" onclick="switchTab('tab-accounts')">
+      <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 14v4M12 14v4M16 14v4"/>
+      </svg>
+      <span class="tab-label">Accounts</span>
+    </button>
+
+    <button class="tab-btn" data-tab="tab-trades" onclick="switchTab('tab-trades')">
+      <div class="icon-wrap">
+        <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="22 7 13.5 15.5 8.5 10.5 2 17"></polyline>
+          <polyline points="16 7 22 7 22 13"></polyline>
+        </svg>
+        <span class="tab-badge-dot" id="tradeDotBadge" style="display:none"></span>
+      </div>
+      <span class="tab-label">Trades</span>
+    </button>
+
+    <button class="tab-btn" data-tab="tab-logs" onclick="switchTab('tab-logs')">
+      <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+        <polyline points="14 2 14 8 20 8"></polyline>
+        <line x1="16" y1="13" x2="8" y2="13"></line>
+        <line x1="16" y1="17" x2="8" y2="17"></line>
+        <polyline points="10 9 9 9 8 9"></polyline>
+      </svg>
+      <span class="tab-label">Logs</span>
+    </button>
+
+    <button class="tab-btn" data-tab="tab-controls" onclick="switchTab('tab-controls')">
+      <svg class="tab-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"></circle>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+      </svg>
+      <span class="tab-label">Controls</span>
+    </button>
+  </nav>
+
+  <!-- Mobile Bottom Sheet / Modal Overlay -->
+  <div class="modal-backdrop" id="modalOverlay" style="display:none">
+    <div class="bottom-sheet" id="bottomSheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-content">
+        <div class="sheet-icon" id="modalIcon">⚠️</div>
+        <h3 class="sheet-title" id="modalTitle">Konfirmasi Perintah</h3>
+        <p class="sheet-msg" id="modalMsg"></p>
+        <div class="sheet-actions">
+          <button class="sheet-btn btn-cancel" onclick="closeModal()">Batal</button>
+          <button class="sheet-btn btn-confirm" id="modalConfirmBtn">Lanjutkan</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toastContainer" class="toast-stack"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

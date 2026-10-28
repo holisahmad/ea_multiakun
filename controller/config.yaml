@@ -1,0 +1,115 @@
+# =====================================================================
+# Smart Trade Multi Account - Configuration
+# =====================================================================
+# IMPORTANT: This file contains strategy and risk parameters ONLY.
+# Never put broker passwords, investor passwords, or API secrets here.
+# Use MT5 terminal's saved login or OS keychain for credentials.
+# =====================================================================
+
+app:
+  name: Smart Trade Multi Account
+  version: "0.1"
+  environment: live          # "demo" or "live"
+  live_trading_enabled: true  # Enabled for live trading
+  log_level: INFO
+  timezone: Asia/Jakarta
+
+server:
+  host: "127.0.0.1"
+  port: 8000
+  ea_auth_token: "KunciAmanSTMA2026"  # Shared secret between Python and EA
+  command_poll_interval_seconds: 1
+  status_push_interval_seconds: 5
+  command_timeout_seconds: 10
+  max_command_age_seconds: 30
+
+strategy:
+  strategy_id: stma-xau-v1
+  symbol: XAUUSD
+  direction_mode: signal_based   # signal_based (supports BUY + SELL)
+  default_lot: 0.01
+  max_layers_per_account: 3
+  max_active_cycles_per_symbol: 1
+  entry_model: hybrid            # hybrid = distance + confirmation + risk engine
+
+  # Stage 2 trigger: minimum adverse price movement from stage-1 entry
+  stage2_distance_points: 200    # In MT5 points (verify for XAUUSD broker)
+  # Stage 3 trigger: additional adverse movement from stage-2 entry
+  stage3_distance_points: 200
+
+  # Entry confirmation (support/resistance zone) - points from current price
+  confirmation_zone_points: 30   # Signal entry if price within this zone of S/R
+
+  tp_mode: individual            # individual or group (group added later)
+  individual_tp_points: 300      # TP in MT5 points per position
+  individual_sl_enabled: true
+  individual_sl_points: 500      # SL in MT5 points per position
+
+  trailing_enabled: false        # Set to true to enable
+  trailing_start_points: 150     # Trailing activates after this profit
+  trailing_distance_points: 100  # Distance to maintain from price
+  trailing_step_points: 10       # Minimum step to move trailing stop
+
+  max_spread_points: 50          # Reject entry if spread > this
+  signal_max_age_seconds: 60     # Signals older than this are rejected
+  deviation_points: 10           # Allowed slippage on order execution
+
+risk:
+  aggregate_protection_enabled: true
+  require_operator_resume_after_critical_trigger: true
+  block_entries_if_account_stale: true
+  account_stale_threshold_seconds: 30
+
+  # Per-account limits
+  max_layers_per_account: 3
+  max_volume_per_account: 0.03
+  max_floating_loss_per_account_usd: 50.0   # Batas floating loss per akun ($50)
+  max_drawdown_per_account_pct: 15.0        # Batas drawdown per akun (15%)
+  min_margin_level_pct: 200.0               # Minimum margin level (200%)
+  max_order_failures_per_window: 5
+  order_failure_window_seconds: 300
+
+  # Aggregate (strategy-wide) limits
+  max_strategy_positions: 9
+  max_strategy_volume: 0.10                 # Total volume maksimal strategi (0.10 lot)
+  max_strategy_floating_loss_usd: 150.0     # Total floating loss maksimal strategi ($150)
+  max_strategy_drawdown_pct: 20.0           # Total drawdown maksimal strategi (20%)
+
+accounts:
+  - alias: account_1
+    role: primary
+    enabled: true
+    login: null           # Fill in your MT5 account number (integer)
+    server: null          # Fill in MT5 server name (string, e.g. "Exness-MT5Real")
+    currency: USD         # Account deposit currency
+    is_cent: false        # Set true if this is a cent account
+    cent_divisor: 100     # Only used if is_cent=true
+    magic_number: 20240001
+    max_layers: 3
+    default_lot: 0.01
+
+  - alias: account_2
+    role: secondary
+    enabled: true
+    symbol: XAUUSDm       # Broker specific symbol suffix
+    login: null
+    server: null
+    currency: USD
+    is_cent: false
+    cent_divisor: 100
+    magic_number: 20240002
+    max_layers: 3
+    default_lot: 0.01
+
+  - alias: account_3
+    role: tertiary
+    enabled: true
+    symbol: XAUUSDm       # Broker specific symbol suffix
+    login: null
+    server: null
+    currency: USD
+    is_cent: false
+    cent_divisor: 100
+    magic_number: 20240003
+    max_layers: 3
+    default_lot: 0.01

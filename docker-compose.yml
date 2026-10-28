@@ -1,0 +1,21 @@
+services:
+  stma-controller:
+    build: .
+    container_name: stma-trading-controller
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - STMA_SERVER_HOST=0.0.0.0
+      - STMA_SERVER_PORT=8000
+      - STMA_AUTH_TOKEN=KunciAmanSTMA2026
+    volumes:
+      # Mount directory data agar file SQLite database persisten saat container restart/update
+      - ./data:/app/data
+      # Mount config jika ingin mengubah parameter strategi tanpa rebuild image
+      - ./controller/config.yaml:/app/controller/config.yaml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
