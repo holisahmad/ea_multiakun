@@ -976,6 +976,120 @@ function updateTpSlHint() {
 }
 
 // ── Manual Order Entry ─────────────────────────────────────
+
+// ── Trades Tab TP/SL Unit (terpisah dari Overview) ─────────
+let g_tpslUnitTrade = 'usd';
+
+function setTpSlUnitTrade(unit) {
+  g_tpslUnitTrade = unit;
+  const btnUsd = document.getElementById('btnTradeUnitUsd');
+  const btnPts = document.getElementById('btnTradeUnitPoints');
+  const tpLbl  = document.getElementById('tradeTpLbl');
+  const slLbl  = document.getElementById('tradeSlLbl');
+  const tpInp  = document.getElementById('tradeTpInput');
+  const slInp  = document.getElementById('tradeSlInput');
+  const lotInp = document.getElementById('tradeLotInput');
+  const lot = lotInp ? Math.max(0.01, parseFloat(lotInp.value) || 0.01) : 0.01;
+
+  if (unit === 'usd') {
+    if (btnUsd) btnUsd.classList.add('active');
+    if (btnPts) btnPts.classList.remove('active');
+    if (tpLbl) tpLbl.textContent = 'TP ($ USD)';
+    if (slLbl) slLbl.textContent = 'SL ($ USD)';
+    if (tpInp) { tpInp.step = '0.5'; tpInp.placeholder = '3.00'; const v = parseFloat(tpInp.value); if (v > 50) tpInp.value = ((v / 10) * lot).toFixed(2); else if (!v || v <= 0) tpInp.value = '3.00'; }
+    if (slInp) { slInp.step = '0.5'; slInp.placeholder = '5.00'; const v = parseFloat(slInp.value); if (v > 50) slInp.value = ((v / 10) * lot).toFixed(2); else if (!v || v <= 0) slInp.value = '5.00'; }
+  } else {
+    if (btnUsd) btnUsd.classList.remove('active');
+    if (btnPts) btnPts.classList.add('active');
+    if (tpLbl) tpLbl.textContent = 'TP (Poin)';
+    if (slLbl) slLbl.textContent = 'SL (Poin)';
+    if (tpInp) { tpInp.step = '100'; tpInp.placeholder = '3000'; const v = parseFloat(tpInp.value); if (v > 0 && v < 50) tpInp.value = Math.round((v / lot) * 10); else if (!v || v <= 0) tpInp.value = '3000'; }
+    if (slInp) { slInp.step = '100'; slInp.placeholder = '5000'; const v = parseFloat(slInp.value); if (v > 0 && v < 50) slInp.value = Math.round((v / lot) * 10); else if (!v || v <= 0) slInp.value = '5000'; }
+  }
+  updateTpSlHintTrade();
+}
+
+function updateTpSlHintTrade() {
+  const hintEl = document.getElementById('tradeInputHint');
+  const lotInp = document.getElementById('tradeLotInput');
+  const tpInp  = document.getElementById('tradeTpInput');
+  const slInp  = document.getElementById('tradeSlInput');
+  if (!hintEl) return;
+  const lot = lotInp ? Math.max(0.01, parseFloat(lotInp.value) || 0.01) : 0.01;
+  const tpVal = tpInp ? parseFloat(tpInp.value) || 0 : 0;
+  const slVal = slInp ? parseFloat(slInp.value) || 0 : 0;
+  if (g_tpslUnitTrade === 'usd') {
+    const tpPts = tpVal > 0 ? Math.round((tpVal / lot) * 10) : 0;
+    const slPts = slVal > 0 ? Math.round((slVal / lot) * 10) : 0;
+    hintEl.innerHTML = `💡 <strong>Mode Target Dollar:</strong> TP $${tpVal.toFixed(2)} ≈ ${tpPts.toLocaleString()} poin | SL $${slVal.toFixed(2)} ≈ ${slPts.toLocaleString()} poin pada ${lot.toFixed(2)} lot. (0 = tanpa TP/SL)`;
+  } else {
+    const tpUsd = tpVal > 0 ? ((tpVal / 10) * lot).toFixed(2) : '0.00';
+    const slUsd = slVal > 0 ? ((slVal / 10) * lot).toFixed(2) : '0.00';
+    hintEl.innerHTML = `💡 <strong>Mode Poin Broker:</strong> TP ${tpVal} poin ≈ $${tpUsd} USD | SL ${slVal} poin ≈ $${slUsd} USD pada ${lot.toFixed(2)} lot. (10 poin = 1 pip)`;
+  }
+}
+
+async function sendManualOrderTrade(direction) {
+  const dir = direction.toUpperCase();
+  const icon = dir === 'BUY' ? '🟢' : '🔴';
+  const color = dir === 'BUY' ? 'var(--green)' : 'var(--red)';
+
+  const lotInput = document.getElementById('tradeLotInput');
+  const tpInput  = document.getElementById('tradeTpInput');
+  const slInput  = document.getElementById('tradeSlInput');
+
+  const volume = lotInput ? Math.max(0.01, parseFloat(lotInput.value) || 0.01) : 0.01;
+  const rawTp = tpInput && tpInput.value !== '' ? parseFloat(tpInput.value) : 0;
+  const rawSl = slInput && slInput.value !== '' ? parseFloat(slInput.value) : 0;
+
+  let tpPoints = 0, slPoints = 0, tpDesc = 'Tanpa TP', slDesc = 'Tanpa SL';
+
+  if (g_tpslUnitTrade === 'usd') {
+    if (rawTp > 0) { tpPoints = Math.round((rawTp / volume) * 10); tpDesc = `$${rawTp.toFixed(2)} USD (${tpPoints.toLocaleString()} Poin)`; }
+    if (rawSl > 0) { slPoints = Math.round((rawSl / volume) * 10); slDesc = `$${rawSl.toFixed(2)} USD (${slPoints.toLocaleString()} Poin)`; }
+  } else {
+    if (rawTp > 0) { tpPoints = parseInt(rawTp, 10); tpDesc = `${tpPoints} Poin (~$${((tpPoints / 10) * volume).toFixed(2)} USD)`; }
+    if (rawSl > 0) { slPoints = parseInt(rawSl, 10); slDesc = `${slPoints} Poin (~$${((slPoints / 10) * volume).toFixed(2)} USD)`; }
+  }
+
+  showModal(
+    icon,
+    `Konfirmasi Manual ${dir} Order`,
+    `Eksekusi order ${dir} XAUUSD pada Akun 1 (Primary):\n\n• Target: Akun 1 (Primary - Stage 1)\n• Simbol: XAUUSD\n• Volume: ${volume.toFixed(2)} Lot\n• Take Profit: ${tpDesc}\n• Stop Loss: ${slDesc}\n\nLanjutkan eksekusi ke broker?`,
+    async () => {
+      try {
+        toast(`Mengirim order ${dir} ${volume} lot...`, 'info');
+        const res = await apiFetch('/signal', {
+          method: 'POST',
+          body: JSON.stringify({
+            strategy_id: 'stma-xau-v1',
+            symbol: 'XAUUSD',
+            direction: dir,
+            source: 'dashboard-manual',
+            price: null,
+            payload: {
+              volume,
+              tp_points: tpPoints > 0 ? tpPoints : null,
+              sl_points: slPoints > 0 ? slPoints : null,
+            }
+          }),
+        });
+        if (res.status === 'ACCEPTED') {
+          toast(`✓ Order ${dir} Berhasil Diterima! Perintah dikirim ke MT5 Akun 1.`, 'success');
+        } else if (res.status === 'RISK_DENIED') {
+          toast(`Ditolak Risk Engine: ${res.message}`, 'error');
+        } else {
+          toast(`Sinyal ${res.status}: ${res.message || 'Tidak dapat diproses'}`, 'warning');
+        }
+        setTimeout(refreshAll, 600);
+      } catch (err) {
+        toast(`Gagal: ${err.message}`, 'error');
+      }
+    }
+  );
+  const confirmBtn = document.getElementById('modalConfirmBtn');
+  if (confirmBtn) confirmBtn.style.background = color;
+}
 async function sendManualOrder(direction, prefix = 'order') {
   const dir = direction.toUpperCase();
   const icon = dir === 'BUY' ? '🟢' : '🔴';
