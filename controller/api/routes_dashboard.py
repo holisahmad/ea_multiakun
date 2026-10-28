@@ -19,6 +19,8 @@ from ..database.models import (
     RiskEvent,
     Command,
     SystemEvent,
+    Execution,
+    Signal,
 )
 from ..core.schemas import (
     AccountSummary,
@@ -42,7 +44,7 @@ def get_system_state(
     """Overall system state."""
     active_cycles = (
         db.query(Cycle)
-        .filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR"]))
+        .filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED", "FAILED"]))
         .count()
     )
 
@@ -127,7 +129,7 @@ def get_active_cycles(
     """List active (or all) cycles."""
     query = db.query(Cycle)
     if not include_completed:
-        query = query.filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR"]))
+        query = query.filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED", "FAILED"]))
 
     cycles = query.order_by(Cycle.started_at.desc()).limit(50).all()
 
@@ -230,30 +232,196 @@ def get_risk_events(
 @router.get("/commands")
 def get_recent_commands(
     db: Session = Depends(get_db),
+    cfg: STMAConfig = Depends(get_config),
     limit: int = 50,
 ):
-    """Get recent commands for audit."""
+    """Get recent commands for audit with clear origin and role attribution."""
     cmds = (
         db.query(Command)
         .order_by(Command.created_at.desc())
         .limit(limit)
         .all()
     )
-    return [
-        {
+    result = []
+    for c in cmds:
+        cy = c.cycle
+        sig = cy.signal if cy else None
+        source_str = (sig.source if sig else "") or (c.payload_json or "")
+        is_manual = "manual" in source_str.lower() or "dashboard" in source_str.lower()
+        
+        acc = cfg.get_account(c.account_alias)
+        role = acc.role if acc else "unknown"
+
+        result.append({
             "id": c.id,
             "cycle_id": c.cycle_id,
             "account_alias": c.account_alias,
+            "account_name": "Akun 1 (Primary)" if c.account_alias == "account_1" else ("Akun 2 (Secondary)" if c.account_alias == "account_2" else "Akun 3 (Tertiary)"),
+            "account_role": role,
             "action": c.action,
             "state": c.state,
             "volume": c.volume,
             "tp_points": c.tp_points,
             "sl_points": c.sl_points,
             "layer": c.layer,
+            "source_type": "MANUAL" if is_manual else "BOT",
             "created_at": c.created_at.isoformat() if c.created_at else None,
-        }
-        for c in cmds
-    ]
+        })
+    return result
+
+
+@router.get("/trades-history")
+def get_trades_history(
+    db: Session = Depends(get_db),
+    cfg: STMAConfig = Depends(get_config),
+    limit: int = 50,
+):
+    """Get list of executed trades from broker with account and origin attribution."""
+    execs = (
+        db.query(Execution)
+        .order_by(Execution.recorded_at.desc())
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for e in execs:
+        cmd = e.command
+        cy = cmd.cycle if cmd else None
+        sig = cy.signal if cy else None
+        
+        acc = cfg.get_account(e.account_alias)
+        role = acc.role if acc else "unknown"
+        
+        source = (sig.source if sig else "") or (cmd.payload_json if cmd else "")
+        is_manual = "manual" in source.lower() or "dashboard" in source.lower()
+        source_type = "MANUAL" if is_manual else "BOT"
+
+        action = cmd.action if cmd else "UNKNOWN"
+        direction = "BUY" if "BUY" in action else ("SELL" if "SELL" in action else "CLOSE")
+
+        result.append({
+            "id": e.id,
+            "account_alias": e.account_alias,
+            "account_name": "Akun 1 (Primary)" if e.account_alias == "account_1" else ("Akun 2 (Secondary)" if e.account_alias == "account_2" else "Akun 3 (Tertiary)"),
+            "account_role": role,
+            "order_ticket": e.order_ticket,
+            "deal_ticket": e.deal_ticket,
+            "action": action,
+            "direction": direction,
+            "layer": cmd.layer if cmd else 1,
+            "volume": e.executed_volume or (cmd.volume if cmd else 0.01),
+            "executed_price": e.executed_price,
+            "tp_points": cmd.tp_points if cmd else None,
+            "sl_points": cmd.sl_points if cmd else None,
+            "status": e.status,
+            "retcode": e.retcode,
+            "retcode_desc": "Berhasil (Done)" if e.retcode == 10009 else f"Kode {e.retcode}",
+            "source_type": source_type,
+            "source_raw": sig.source if sig else "manual",
+            "recorded_at": e.recorded_at.isoformat() if e.recorded_at else None,
+        })
+    return result
+
+
+@router.get("/signals")
+def get_signals_log(
+    db: Session = Depends(get_db),
+    limit: int = 50,
+):
+    """Get recent trading signals log with acceptance and rejection details."""
+    signals = (
+        db.query(Signal)
+        .order_by(Signal.received_at.desc())
+        .limit(limit)
+        .all()
+    )
+    result = []
+    for s in signals:
+        is_manual = "manual" in (s.source or "").lower() or "dashboard" in (s.source or "").lower()
+        result.append({
+            "id": s.id,
+            "symbol": s.symbol,
+            "direction": s.direction,
+            "source": s.source,
+            "source_type": "MANUAL" if is_manual else "BOT",
+            "status": s.status,
+            "reject_reason": s.reject_reason,
+            "received_at": s.received_at.isoformat() if s.received_at else None,
+        })
+    return result
+
+
+@router.get("/performance")
+def get_trading_performance(
+    db: Session = Depends(get_db),
+    cfg: STMAConfig = Depends(get_config),
+):
+    """Get today's trading summary and per-account performance matrix."""
+    today_utc = _utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    
+    execs_today = (
+        db.query(Execution)
+        .filter(Execution.recorded_at >= today_utc)
+        .all()
+    )
+    # If today's list is empty, also count last 24h
+    if not execs_today:
+        execs_today = db.query(Execution).order_by(Execution.recorded_at.desc()).limit(30).all()
+
+    total_trades_today = len(execs_today)
+    total_vol_today = sum(e.executed_volume or 0 for e in execs_today)
+    buy_trades = sum(1 for e in execs_today if e.command and "BUY" in e.command.action)
+    sell_trades = sum(1 for e in execs_today if e.command and "SELL" in e.command.action)
+
+    completed_cycles_today = (
+        db.query(Cycle)
+        .filter(Cycle.state == "COMPLETED")
+        .order_by(Cycle.ended_at.desc())
+        .limit(20)
+        .all()
+    )
+    realized_pnl_today = sum(c.realized_pnl_usd or 0.0 for c in completed_cycles_today)
+
+    acc_matrix = []
+    total_floating_pnl = 0.0
+    for account in cfg.accounts:
+        st = db.query(AccountStatus).filter(AccountStatus.account_alias == account.alias).first()
+        float_pnl = account.normalize_amount(st.floating_pnl) if st and st.floating_pnl is not None else 0.0
+        total_floating_pnl += float_pnl
+        
+        acc_trades_cnt = sum(1 for e in execs_today if e.account_alias == account.alias)
+        
+        acc_matrix.append({
+            "alias": account.alias,
+            "name": "Akun 1 (Primary)" if account.alias == "account_1" else ("Akun 2 (Secondary)" if account.alias == "account_2" else "Akun 3 (Tertiary)"),
+            "role": account.role,
+            "connected": bool(st and st.connected),
+            "balance": account.normalize_amount(st.balance) if st and st.balance is not None else 0.0,
+            "equity": account.normalize_amount(st.equity) if st and st.equity is not None else 0.0,
+            "floating_pnl": float_pnl,
+            "margin_level_pct": st.margin_level_pct if st else 0.0,
+            "open_positions": st.open_positions if st else 0,
+            "trades_count": acc_trades_cnt,
+        })
+
+    active_cycles_count = (
+        db.query(Cycle)
+        .filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED", "FAILED"]))
+        .count()
+    )
+
+    return {
+        "total_trades_today": total_trades_today,
+        "buy_trades_today": buy_trades,
+        "sell_trades_today": sell_trades,
+        "total_volume_today": round(total_vol_today, 4),
+        "total_floating_pnl": round(total_floating_pnl, 2),
+        "total_realized_pnl": round(realized_pnl_today, 2),
+        "net_pnl_today": round(total_floating_pnl + realized_pnl_today, 2),
+        "accounts": acc_matrix,
+        "active_cycles_count": active_cycles_count,
+        "timestamp_utc": _utcnow().isoformat(),
+    }
 
 
 @router.get("/system-events")

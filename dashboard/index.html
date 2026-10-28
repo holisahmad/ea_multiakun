@@ -36,6 +36,7 @@
             <span class="conn-dot" id="connDot"></span>
             <span class="conn-text" id="connLabel">Connecting</span>
           </div>
+          <span class="live-streaming-chip"><span class="pulse-dot"></span>LIVE 1.5s</span>
         </div>
       </div>
     </div>
@@ -57,15 +58,15 @@
       <span class="chip-val status-active" id="barStrategy">Active</span>
     </div>
     <div class="metric-chip">
-      <span class="chip-label">Protection</span>
-      <span class="chip-val" id="barProtection">Normal</span>
+      <span class="chip-label">MT5 Online</span>
+      <span class="chip-val highlight" id="barOnlineAccounts">0/3</span>
     </div>
     <div class="metric-chip">
-      <span class="chip-label">Active Cycles</span>
+      <span class="chip-label">Siklus Aktif</span>
       <span class="chip-val highlight" id="barCycles">0</span>
     </div>
     <div class="metric-chip">
-      <span class="chip-label">Open Pos</span>
+      <span class="chip-label">Posisi Terbuka</span>
       <span class="chip-val highlight" id="barPositions">0</span>
     </div>
   </section>
@@ -84,6 +85,53 @@
     
     <!-- TAB 1: OVERVIEW -->
     <div class="tab-pane active" id="tab-overview">
+      <!-- Trading Performance Summary Today -->
+      <div class="mobile-card perf-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">📊</span>
+            <span class="head-title">Performa Trading Hari Ini</span>
+          </div>
+          <span class="card-tag tag-cyan" id="perfTodayTag">Hari Ini</span>
+        </div>
+        <div class="summary-grid">
+          <div class="summary-box">
+            <span class="box-label">Total Trade Hari Ini</span>
+            <span class="box-value highlight" id="perfTotalTrades">0</span>
+            <span class="box-sub" id="perfTradeBreakdown">0 BUY • 0 SELL</span>
+          </div>
+          <div class="summary-box">
+            <span class="box-label">Total Floating P/L</span>
+            <span class="box-value" id="perfFloatingPnl">$0.00</span>
+            <span class="box-sub">3 Akun Terpantau</span>
+          </div>
+          <div class="summary-box">
+            <span class="box-label">Total Realized P/L</span>
+            <span class="box-value" id="perfRealizedPnl">$0.00</span>
+            <span class="box-sub">Siklus Selesai</span>
+          </div>
+          <div class="summary-box">
+            <span class="box-label">Volume Lot</span>
+            <span class="box-value" id="perfTotalVolume">0.00 Lot</span>
+            <span class="box-sub" id="perfNetPnl">Net: $0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Active Cycle Explainer & Status Banner -->
+      <div class="mobile-card cycle-info-banner" id="cycleStatusCard">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">🔄</span>
+            <span class="head-title" id="cycleStatusTitle">Status Siklus (Cycle): Standby</span>
+          </div>
+          <span class="status-pill status-pill-online" id="cycleStatusBadge">Siap Entry Baru</span>
+        </div>
+        <div class="cycle-explainer-text" id="cycleStatusDesc">
+          <strong>ℹ️ Apa itu Siklus (Cycle)?</strong> 1 Siklus adalah 1 rangkaian transaksi averaging bertingkat untuk 1 arah sinyal (Akun 1 Primary → Akun 2 Secondary → Akun 3 Tertiary). Sistem membatasi maksimal 1 siklus aktif agar tidak terjadi overtrade.
+        </div>
+      </div>
+
       <!-- System Summary Card -->
       <div class="mobile-card">
         <div class="card-head">
@@ -267,29 +315,65 @@
         <div class="card-head">
           <div class="card-head-left">
             <span class="head-icon">🔄</span>
-            <span class="head-title">Active Cycles</span>
+            <span class="head-title">Active Strategy Cycles</span>
           </div>
           <span class="count-badge" id="cycleCount">0</span>
         </div>
+        <div class="card-subtext">Siklus strategi yang sedang aktif mengelola posisi bertingkat di akun terhubung.</div>
         <div id="cyclesList" class="cycles-container">
-          <div class="empty-state">Tidak ada siklus aktif saat ini</div>
+          <div class="empty-state">Tidak ada siklus aktif saat ini (Standby)</div>
         </div>
       </div>
 
-      <!-- Open Positions Section -->
-      <div class="mobile-card">
-        <div class="card-head">
-          <div class="card-head-left">
-            <span class="head-icon">📈</span>
-            <span class="head-title">Open Positions</span>
+      <!-- Trade Sub-Tab Navigation -->
+      <div class="trade-subtab-nav">
+        <button class="subtab-btn active" id="btnSubtabPos" onclick="switchTradeSubtab('positions')">
+          🟢 Posisi Terbuka (<span id="posSubCount">0</span>)
+        </button>
+        <button class="subtab-btn" id="btnSubtabHistory" onclick="switchTradeSubtab('history')">
+          📜 Riwayat Trade MT5 (<span id="tradeHistCount">0</span>)
+        </button>
+      </div>
+
+      <!-- Section 1: Open Positions -->
+      <div id="panelTradePositions" class="trade-subpanel">
+        <div class="mobile-card">
+          <div class="card-head">
+            <div class="card-head-left">
+              <span class="head-icon">📈</span>
+              <span class="head-title">Open Positions</span>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button class="btn-close-all" id="btnCloseAllPos" onclick="closeAllPositions()" style="display:none">✕ Tutup Semua Posisi</button>
+              <span class="count-badge" id="posCount">0</span>
+            </div>
           </div>
-          <div style="display:flex;align-items:center;gap:8px">
-            <button class="btn-close-all" id="btnCloseAllPos" onclick="closeAllPositions()" style="display:none">✕ Tutup Semua Posisi</button>
-            <span class="count-badge" id="posCount">0</span>
+          <div id="positionsList" class="positions-container">
+            <div class="empty-state">Tidak ada posisi terbuka</div>
           </div>
         </div>
-        <div id="positionsList" class="positions-container">
-          <div class="empty-state">Tidak ada posisi terbuka</div>
+      </div>
+
+      <!-- Section 2: Trade History (Executed on Broker) with Pagination -->
+      <div id="panelTradeHistory" class="trade-subpanel" style="display:none">
+        <div class="mobile-card">
+          <div class="card-head">
+            <div class="card-head-left">
+              <span class="head-icon">📜</span>
+              <span class="head-title">Riwayat Eksekusi Broker (MT5)</span>
+            </div>
+            <span class="card-tag tag-cyan" id="tradeHistTotalTag">0 Trade</span>
+          </div>
+          <div class="card-subtext">Daftar transaksi real yang telah dieksekusi di terminal MetaTrader 5 lengkap dengan atribusi akun & asal order.</div>
+          <div id="tradeHistoryList" class="trades-history-list">
+            <div class="loading-state">Memuat riwayat transaksi...</div>
+          </div>
+          <!-- Pagination -->
+          <div class="pagination-container" id="tradeHistPagination">
+            <button class="page-nav-btn" id="btnPrevTradePage" onclick="changeTradePage(-1)">‹ Sebelumnya</button>
+            <span class="page-indicator-text" id="tradePageIndicator">Halaman 1 / 1</span>
+            <button class="page-nav-btn" id="btnNextTradePage" onclick="changeTradePage(1)">Selanjutnya ›</button>
+          </div>
         </div>
       </div>
     </div>
@@ -298,10 +382,31 @@
     <div class="tab-pane" id="tab-logs">
       <!-- Filter Chips -->
       <div class="log-filter-chips">
-        <button class="chip-filter active" onclick="filterLogs('all')">All</button>
-        <button class="chip-filter" onclick="filterLogs('commands')">Commands</button>
+        <button class="chip-filter active" onclick="filterLogs('all')">Semua</button>
+        <button class="chip-filter" onclick="filterLogs('signals')">Sinyal Masuk (<span id="sigCount">0</span>)</button>
+        <button class="chip-filter" onclick="filterLogs('commands')">Perintah MT5 (<span id="cmdCount">0</span>)</button>
         <button class="chip-filter" onclick="filterLogs('risks')">Risk Events (<span id="riskCount">0</span>)</button>
-        <button class="chip-filter" onclick="filterLogs('systems')">System Events</button>
+        <button class="chip-filter" onclick="filterLogs('systems')">Sistem</button>
+      </div>
+
+      <!-- Signals Panel (Inbound Signals & Rejection Reasons) -->
+      <div class="mobile-card log-panel-section" id="secSignals">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">📡</span>
+            <span class="head-title">Log Sinyal Masuk & Validasi</span>
+          </div>
+          <span class="count-badge" id="sigBadge">0</span>
+        </div>
+        <div class="card-subtext">Riwayat setiap sinyal trading yang masuk (dari Bot/Manual) beserta status DITERIMA atau DITOLAK lengkap dengan alasannya.</div>
+        <div id="signalsList" class="log-items-list">
+          <div class="loading-state">Memuat log sinyal...</div>
+        </div>
+        <div class="pagination-container" id="sigPagination">
+          <button class="page-nav-btn" id="btnPrevSigPage" onclick="changeSigPage(-1)">‹ Sebelumnya</button>
+          <span class="page-indicator-text" id="sigPageIndicator">Halaman 1 / 1</span>
+          <button class="page-nav-btn" id="btnNextSigPage" onclick="changeSigPage(1)">Selanjutnya ›</button>
+        </div>
       </div>
 
       <!-- Commands Panel -->
