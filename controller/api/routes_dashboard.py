@@ -89,11 +89,19 @@ def get_accounts(
                 last_updated = last_updated.replace(tzinfo=timezone.utc)
             data_age = (_utcnow() - last_updated).total_seconds()
             stale = data_age > cfg.risk.account_stale_threshold_seconds or not status.connected
+            
+            # If account heartbeat is stale, mark as disconnected in DB cache
+            if stale and status.connected:
+                status.connected = False
+                db.add(status)
+                db.commit()
+
+        is_connected = bool(status and status.connected and not stale)
 
         summaries.append(AccountSummary(
             alias=account.alias,
             role=account.role,
-            connected=status.connected if status else False,
+            connected=is_connected,
             balance=account.normalize_amount(status.balance) if status and status.balance is not None else None,
             equity=account.normalize_amount(status.equity) if status and status.equity is not None else None,
             free_margin=account.normalize_amount(status.free_margin) if status and status.free_margin is not None else None,

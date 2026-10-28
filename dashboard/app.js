@@ -159,7 +159,10 @@ async function loadSystemState() {
   if (stateEnv) stateEnv.textContent = data.environment.toUpperCase();
 
   const stateLive = document.getElementById('stateLive');
-  if (stateLive) stateLive.textContent = data.live_trading_enabled ? '🔴 LIVE' : '🟢 DEMO';
+  if (stateLive) {
+    stateLive.textContent = data.live_trading_enabled ? 'LIVE (Real Mode)' : 'DEMO';
+    stateLive.style.color = data.live_trading_enabled ? 'var(--cyan)' : 'var(--green)';
+  }
 
   const stateProtection = document.getElementById('stateProtection');
   if (stateProtection) {
@@ -189,7 +192,15 @@ async function loadAccounts() {
   const fullContainer = document.getElementById('accountsList');
   const overviewContainer = document.getElementById('overviewAccountsList');
   const navBadge = document.getElementById('navAccBadge');
-  if (navBadge) navBadge.textContent = accounts.length;
+  
+  const onlineCount = accounts.filter(a => a.connected && !a.is_stale).length;
+  if (navBadge) navBadge.textContent = `${onlineCount}/${accounts.length}`;
+
+  // Update MT5 status in metrics bar if element exists
+  const barProtection = document.getElementById('barProtection');
+  if (barProtection && onlineCount === 0) {
+    barProtection.title = "Semua terminal MT5 sedang offline / closed";
+  }
 
   if (!accounts.length) {
     const emptyHtml = '<div class="empty-state">Belum ada akun MT5 yang terdaftar</div>';
@@ -206,33 +217,36 @@ async function loadAccounts() {
     const eqStr  = acc.equity != null ? acc.equity.toFixed(2) : '0.00';
     const mlStr  = acc.margin_level_pct != null ? acc.margin_level_pct.toFixed(0) + '%' : '—';
 
-    let dotColor = 'var(--text-muted)';
-    let statusText = 'Offline';
-    if (acc.connected && !acc.is_stale) {
-      dotColor = 'var(--green)';
-      statusText = 'Connected';
-    } else if (acc.is_stale) {
-      dotColor = 'var(--yellow)';
-      statusText = 'Stale Data';
+    const isLiveOnline = acc.connected && !acc.is_stale;
+    let dotColor = isLiveOnline ? 'var(--green)' : 'var(--red)';
+    let statusText = isLiveOnline ? 'Live Connected' : 'MT5 Closed / Offline';
+    let statusBadgeClass = isLiveOnline ? 'status-pill-online' : 'status-pill-offline';
+
+    let ageStr = '';
+    if (acc.data_age_seconds != null) {
+      const s = Math.round(acc.data_age_seconds);
+      if (s < 60) ageStr = `${s}d lalu`;
+      else if (s < 3600) ageStr = `${Math.round(s/60)}m lalu`;
+      else ageStr = `${Math.round(s/3600)}j lalu`;
     }
 
-    const ageStr = acc.data_age_seconds != null ? `${Math.round(acc.data_age_seconds)}s lalu` : '';
+    const cacheNotice = isLiveOnline ? '' : '<span style="color:var(--text-muted);font-size:9px;margin-left:4px">(Snapshot Terakhir)</span>';
 
     return `
-    <div class="account-card-modern">
+    <div class="account-card-modern ${isLiveOnline ? '' : 'account-card-offline'}">
       <div class="acc-card-top">
         <div class="acc-alias-group">
           <span class="acc-alias">${acc.alias}</span>
           <span class="acc-role-pill role--${acc.role}">${acc.role}</span>
         </div>
-        <div class="acc-status-indicator">
+        <div class="acc-status-indicator ${statusBadgeClass}">
           <span style="width:7px;height:7px;border-radius:50%;background:${dotColor}"></span>
           <span>${statusText}</span>
         </div>
       </div>
       <div class="acc-metrics-matrix">
         <div class="m-cell">
-          <span class="m-cell-label">Balance</span>
+          <span class="m-cell-label">Balance ${cacheNotice}</span>
           <span class="m-cell-val">$${balStr}</span>
         </div>
         <div class="m-cell">
@@ -254,7 +268,7 @@ async function loadAccounts() {
       </div>
       <div class="acc-footer">
         <span>Login: ${acc.login || '—'}</span>
-        <span>${ageStr ? 'Updated: ' + ageStr : ''}</span>
+        <span>${isLiveOnline ? 'Streaming Aktif' : 'Terakhir Aktif: ' + (ageStr || 'Offline')}</span>
       </div>
     </div>`;
   }).join('');
