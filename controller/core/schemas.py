@@ -218,6 +218,7 @@ class OperatorAction(BaseModel):
         "RESUME_STRATEGY",
         "EMERGENCY_PROTECTION",
         "CLOSE_CYCLE",
+        "CLOSE_ALL_POSITIONS",
         "ENABLE_ACCOUNT",
         "DISABLE_ACCOUNT",
         "RESUME_AFTER_CRITICAL",
