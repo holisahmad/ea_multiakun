@@ -165,6 +165,15 @@ def get_active_cycles(
         if started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
 
+        # Parse layer counts
+        import json as _json
+        layer_counts = {"account_1": 0, "account_2": 0, "account_3": 0}
+        if cycle.layer_counts_json:
+            try:
+                layer_counts = _json.loads(cycle.layer_counts_json)
+            except Exception:
+                pass
+
         results.append(CycleSummary(
             cycle_id=cycle.id,
             strategy_id=cycle.strategy_id,
@@ -175,6 +184,9 @@ def get_active_cycles(
             total_positions=total_positions,
             floating_pnl_usd=total_floating,
             realized_pnl_usd=cycle.realized_pnl_usd or 0.0,
+            exit_mode=cycle.exit_mode or "individual",
+            basket_target_usd=cycle.basket_target_usd,
+            layer_counts=layer_counts,
         ))
 
     return results
@@ -485,3 +497,43 @@ def get_system_events(db: Session = Depends(get_db), limit: int = 50):
         }
         for e in events
     ]
+
+
+@router.get("/strategy")
+def get_strategy_config(cfg: STMAConfig = Depends(get_config)):
+    """Expose strategy configuration for dashboard display."""
+    s = cfg.strategy
+    return {
+        "exit_mode": s.exit_mode,
+        "basket_target_usd": s.basket_target_usd,
+        "tp_mode": s.tp_mode,
+        "individual_tp_points": s.individual_tp_points,
+        "individual_sl_enabled": s.individual_sl_enabled,
+        "individual_sl_points": s.individual_sl_points,
+        "accounts": [
+            {
+                "alias": "account_1",
+                "max_layers": s.account1_max_layers,
+                "layer_distance_points": s.account1_layer_distance_points,
+                "signal_type": s.account1_signal_type,
+                "timeframe": s.account1_timeframe,
+                "activate_distance_points": None,  # primary is always active
+            },
+            {
+                "alias": "account_2",
+                "max_layers": s.account2_max_layers,
+                "layer_distance_points": s.account2_layer_distance_points,
+                "signal_type": s.account2_signal_type,
+                "timeframe": s.account2_timeframe,
+                "activate_distance_points": s.account2_activate_distance_points,
+            },
+            {
+                "alias": "account_3",
+                "max_layers": s.account3_max_layers,
+                "layer_distance_points": s.account3_layer_distance_points,
+                "signal_type": s.account3_signal_type,
+                "timeframe": s.account3_timeframe,
+                "activate_distance_points": s.account3_activate_distance_points,
+            },
+        ],
+    }

@@ -128,9 +128,12 @@
           <span class="status-pill status-pill-online" id="cycleStatusBadge">Siap Entry Baru</span>
         </div>
         <div class="cycle-explainer-text" id="cycleStatusDesc">
-          <strong>ℹ️ Apa itu Siklus (Cycle)?</strong> 1 Siklus adalah 1 rangkaian transaksi averaging bertingkat untuk 1 arah sinyal (Akun 1 Primary → Akun 2 Secondary → Akun 3 Tertiary). Sistem membatasi maksimal 1 siklus aktif agar tidak terjadi overtrade.
+          <strong>ℹ️ Apa itu Siklus (Cycle)?</strong> 1 Siklus adalah 1 rangkaian transaksi bertingkat multi-layer untuk 1 arah sinyal (Akun 1 [M1] → Akun 2 [M15] → Akun 3 [M15]). Maksimal 3 layer per akun (total 9 layer).
         </div>
       </div>
+
+      <!-- Strategy & Layer Architecture Panel -->
+      <div id="strategyPanel"></div>
 
       <!-- System Summary Card -->
       <div class="mobile-card">

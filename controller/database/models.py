@@ -102,6 +102,12 @@ class Cycle(Base):
     realized_pnl_usd: Mapped[float] = mapped_column(Float, default=0.0)
     notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
+    # Multi-layer tracking: {"account_1": 1, "account_2": 0, "account_3": 0}
+    layer_counts_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Exit mode: individual | basket
+    exit_mode: Mapped[str] = mapped_column(String(16), default="individual")
+    basket_target_usd: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
     signal: Mapped["Signal"] = relationship("Signal", back_populates="cycles")
     commands: Mapped[list["Command"]] = relationship("Command", back_populates="cycle")
     state_events: Mapped[list["StateEvent"]] = relationship("StateEvent", back_populates="cycle")

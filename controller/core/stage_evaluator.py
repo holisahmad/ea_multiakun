@@ -1,8 +1,11 @@
 """
-core/stage_evaluator.py — Stage 2/3 eligibility evaluator.
+core/stage_evaluator.py — Multi-layer stage evaluator.
 
-Runs periodically to check if active cycles qualify for stage escalation.
-Decoupled from HTTP request cycle for clean separation.
+Runs periodically to check if active cycles qualify for:
+  1. Adding next layer to CURRENT account (intra-account DCA)
+  2. Escalating to next account when current account is full
+
+Supports basket-exit auto-close when total P/L >= basket target.
 """
 from __future__ import annotations
 
@@ -14,7 +17,15 @@ from sqlalchemy.orm import Session
 
 from ..config import STMAConfig
 from ..database.models import Cycle, PositionSnapshot, AccountStatus
-from .cycle_manager import evaluate_stage2, evaluate_stage3
+from .cycle_manager import (
+    evaluate_stage2,
+    evaluate_stage3,
+    check_basket_exit,
+    get_layer_counts,
+    get_account_layer_count,
+    is_account_full,
+    get_max_layers_for_account,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +43,11 @@ def run_stage_evaluation(
     support_levels: Optional[list[float]] = None,
 ) -> dict:
     """
-    Evaluate all active cycles for stage 2/3 progression.
+    Evaluate all active cycles for:
+    - Next-layer entry (same account DCA)
+    - Account escalation (acct1 full → acct2)
+    - Basket exit trigger
+    - Auto-complete cycles with no open positions
 
     Args:
         current_prices: Latest price per symbol from EA market data push.
@@ -43,29 +58,44 @@ def run_stage_evaluation(
     """
     symbol = cfg.strategy.symbol.upper()
     current_price = current_prices.get(symbol)
-    # Auto-complete cycles that have 0 open positions and no pending commands
+
+    # ── Auto-complete cycles with 0 open positions ──────────────────────────
     from ..database.models import Command
     from .cycle_manager import transition_cycle_state
-    for active_c in db.query(Cycle).filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED"])).all():
-        pos_cnt = db.query(PositionSnapshot).filter(PositionSnapshot.cycle_id == active_c.id, PositionSnapshot.is_managed == True).count()
-        cmd_cnt = db.query(Command).filter(Command.cycle_id == active_c.id, Command.state.in_(["PENDING", "SENT"])).count()
-        
+    for active_c in db.query(Cycle).filter(
+        Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED"])
+    ).all():
+        pos_cnt = db.query(PositionSnapshot).filter(
+            PositionSnapshot.cycle_id == active_c.id,
+            PositionSnapshot.is_managed == True,
+        ).count()
+        cmd_cnt = db.query(Command).filter(
+            Command.cycle_id == active_c.id,
+            Command.state.in_(["PENDING", "SENT"]),
+        ).count()
+
         started_at = active_c.started_at
         if started_at and started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
         age_seconds = (_utcnow() - started_at).total_seconds() if started_at else 999.0
 
-        # Only auto-complete if in CLOSING state or after 15s grace period
         if pos_cnt == 0 and cmd_cnt == 0 and (active_c.state == "CLOSING" or age_seconds > 15.0):
-            logger.info("Cycle %s has 0 open positions (age=%.1fs) — marking COMPLETED", active_c.id, age_seconds)
-            transition_cycle_state(db, active_c, "COMPLETED", trigger="all_positions_closed", detail="All managed positions closed")
+            logger.info(
+                "Cycle %s has 0 open positions (age=%.1fs) — marking COMPLETED",
+                active_c.id, age_seconds,
+            )
+            transition_cycle_state(
+                db, active_c, "COMPLETED",
+                trigger="all_positions_closed",
+                detail="All managed positions closed",
+            )
 
     if current_price is None:
         return {"skipped": True, "reason": "no_price"}
 
     actions = []
 
-    # Get all cycles eligible for stage evaluation
+    # ── Get all cycles eligible for stage evaluation ────────────────────────
     active_cycles = (
         db.query(Cycle)
         .filter(
@@ -81,6 +111,13 @@ def run_stage_evaluation(
     )
 
     for cycle in active_cycles:
+        # ── Basket exit check ────────────────────────────────────────────────
+        if cycle.exit_mode == "basket":
+            closed = check_basket_exit(db, cfg, cycle)
+            if closed:
+                actions.append({"cycle_id": cycle.id, "action": "basket_exit_triggered"})
+                continue  # Skip layer evaluation since we're closing
+
         action = _evaluate_cycle(
             db, cfg, cycle, current_price, spread_points, support_levels
         )
@@ -98,7 +135,7 @@ def _evaluate_cycle(
     spread_points: Optional[float],
     support_levels: Optional[list[float]],
 ) -> Optional[dict]:
-    # Check if cycle has finished (all positions closed via TP/SL)
+    # Check if cycle positions have all closed (TP/SL hit)
     if cycle.state in ("ACCOUNT_1_ACTIVE", "ACCOUNT_2_ACTIVE", "ACCOUNT_3_ACTIVE"):
         from ..database.models import Command
         pos_count = (
@@ -117,16 +154,16 @@ def _evaluate_cycle(
         age_seconds = (_utcnow() - started_at).total_seconds() if started_at else 999.0
 
         if pos_count == 0 and pending_cmd_count == 0 and (cycle.state == "CLOSING" or age_seconds > 15.0):
-            logger.info("Cycle %s has 0 open positions (age=%.1fs) — marking COMPLETED", cycle.id, age_seconds)
+            logger.info("Cycle %s has 0 open positions — marking COMPLETED", cycle.id)
             from .cycle_manager import transition_cycle_state
-            transition_cycle_state(db, cycle, "COMPLETED", trigger="all_positions_closed", detail="All managed positions closed")
+            transition_cycle_state(
+                db, cycle, "COMPLETED",
+                trigger="all_positions_closed",
+                detail="All managed positions closed",
+            )
             return {"cycle_id": cycle.id, "action": "cycle_completed"}
 
-    # Find stage 1 entry price from position snapshot
-    stage1_price = _get_entry_price(db, cycle.id, cfg.primary_account().alias if cfg.primary_account() else None)
-    stage2_price = _get_entry_price(db, cycle.id, cfg.secondary_account().alias if cfg.secondary_account() else None)
-
-    # Check support confirmation
+    # ── Check support confirmation ───────────────────────────────────────────
     support_confirmed = False
     if support_levels and cfg.strategy.entry_model == "hybrid":
         support_confirmed = _check_support_confirmation(
@@ -136,7 +173,17 @@ def _evaluate_cycle(
             zone_points=cfg.strategy.confirmation_zone_points,
         )
 
+    # ── Layer/escalation evaluation ─────────────────────────────────────────
+    primary = cfg.primary_account()
+    secondary = cfg.secondary_account()
+    tertiary = cfg.tertiary_account()
+
+    # Get "last entry price" for each account (earliest position = first layer entry)
+    stage1_price = _get_entry_price(db, cycle.id, primary.alias if primary else None)
+    stage2_price = _get_entry_price(db, cycle.id, secondary.alias if secondary else None)
+
     if cycle.state in ("ACCOUNT_1_ACTIVE", "ACCOUNT_2_ELIGIBLE") and stage1_price:
+        layer_info = _build_layer_info(cycle, cfg)
         cmd = evaluate_stage2(
             db=db,
             cfg=cfg,
@@ -147,9 +194,15 @@ def _evaluate_cycle(
             support_confirmed=support_confirmed,
         )
         if cmd:
-            return {"cycle_id": cycle.id, "action": "stage2_command", "cmd_id": cmd.id}
+            return {
+                "cycle_id": cycle.id,
+                "action": "layer_or_escalation_command",
+                "cmd_id": cmd.id,
+                "layer_info": layer_info,
+            }
 
     elif cycle.state in ("ACCOUNT_2_ACTIVE", "ACCOUNT_3_ELIGIBLE") and stage2_price:
+        layer_info = _build_layer_info(cycle, cfg)
         cmd = evaluate_stage3(
             db=db,
             cfg=cfg,
@@ -160,9 +213,24 @@ def _evaluate_cycle(
             support_confirmed=support_confirmed,
         )
         if cmd:
-            return {"cycle_id": cycle.id, "action": "stage3_command", "cmd_id": cmd.id}
+            return {
+                "cycle_id": cycle.id,
+                "action": "layer_or_escalation_command",
+                "cmd_id": cmd.id,
+                "layer_info": layer_info,
+            }
 
     return None
+
+
+def _build_layer_info(cycle: Cycle, cfg: STMAConfig) -> dict:
+    """Build layer progress summary for logging/response."""
+    counts = get_layer_counts(cycle)
+    return {
+        "account_1": f"{counts.get('account_1', 0)}/{cfg.strategy.account1_max_layers}",
+        "account_2": f"{counts.get('account_2', 0)}/{cfg.strategy.account2_max_layers}",
+        "account_3": f"{counts.get('account_3', 0)}/{cfg.strategy.account3_max_layers}",
+    }
 
 
 def _get_entry_price(

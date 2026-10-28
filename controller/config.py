@@ -56,18 +56,41 @@ class StrategyConfig(BaseModel):
     symbol: str = "XAUUSD"
     direction_mode: Literal["signal_based"] = "signal_based"
     default_lot: float = 0.01
-    max_layers_per_account: int = 3
     max_active_cycles_per_symbol: int = 1
     entry_model: Literal["hybrid", "distance_only"] = "hybrid"
 
+    # Exit mode: individual TP per posisi, atau basket TP gabungan
+    exit_mode: Literal["individual", "basket"] = "individual"
+    basket_target_usd: float = 10.00
+    tp_mode: Literal["individual", "basket"] = "individual"  # sync with exit_mode
+    individual_tp_points: int = 300
+    individual_sl_enabled: bool = False  # Default: NO SL
+    individual_sl_points: int = 0
+
+    # Account 1 multi-layer (M1 timeframe)
+    account1_max_layers: int = 3
+    account1_layer_distance_points: int = 200  # Adverse move antar layer (XAUUSD: 200 pts = ~$2)
+    account1_signal_type: str = "fractal_sr"   # fractal_sr | ema_cross | distance_only
+    account1_timeframe: str = "M1"
+
+    # Account 2 multi-layer (M15 timeframe)
+    account2_max_layers: int = 3
+    account2_activate_distance_points: int = 400  # Adverse dari last layer Akun1
+    account2_layer_distance_points: int = 300
+    account2_signal_type: str = "ema_cross"
+    account2_timeframe: str = "M15"
+
+    # Account 3 multi-layer (M15 timeframe)
+    account3_max_layers: int = 3
+    account3_activate_distance_points: int = 500  # Adverse dari last layer Akun2
+    account3_layer_distance_points: int = 400
+    account3_signal_type: str = "ema_cross"
+    account3_timeframe: str = "M15"
+
+    # Legacy/compat - backward compatible
     stage2_distance_points: int = 200
     stage3_distance_points: int = 200
     confirmation_zone_points: int = 30
-
-    tp_mode: Literal["individual", "group"] = "individual"
-    individual_tp_points: int = 300
-    individual_sl_enabled: bool = True
-    individual_sl_points: int = 500
 
     trailing_enabled: bool = False
     trailing_start_points: int = 150
@@ -77,6 +100,11 @@ class StrategyConfig(BaseModel):
     max_spread_points: int = 50
     signal_max_age_seconds: int = 60
     deviation_points: int = 10
+
+    @property
+    def max_layers_per_account(self) -> int:
+        """Backward compat — returns max of all account max_layers."""
+        return max(self.account1_max_layers, self.account2_max_layers, self.account3_max_layers)
 
 
 class RiskConfig(BaseModel):

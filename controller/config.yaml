@@ -28,30 +28,53 @@ strategy:
   symbol: XAUUSD
   direction_mode: signal_based   # signal_based (supports BUY + SELL)
   default_lot: 0.01
-  max_layers_per_account: 3
   max_active_cycles_per_symbol: 1
-  entry_model: hybrid            # hybrid = distance + confirmation + risk engine
+  entry_model: hybrid            # hybrid = distance + signal_confirmation
 
-  # Stage 2 trigger: minimum adverse price movement from stage-1 entry
-  stage2_distance_points: 200    # In MT5 points (verify for XAUUSD broker)
-  # Stage 3 trigger: additional adverse movement from stage-2 entry
-  stage3_distance_points: 200
+  # ── Exit Mode ──────────────────────────────────────────────────────────────
+  # "individual" = TP per posisi masing-masing (DEFAULT, disarankan)
+  # "basket"     = close semua posisi saat total basket profit mencapai target
+  exit_mode: individual
+  basket_target_usd: 10.00       # Dipakai hanya jika exit_mode = basket
 
-  # Entry confirmation (support/resistance zone) - points from current price
-  confirmation_zone_points: 30   # Signal entry if price within this zone of S/R
+  # ── TP / SL Default ────────────────────────────────────────────────────────
+  tp_mode: individual            # individual | basket (sync dengan exit_mode)
+  individual_tp_points: 300      # TP per posisi (MT5 points, XAUUSD: 300 pts = $3.00 @0.01 lot)
+  individual_sl_enabled: false   # DEFAULT: No SL. Gunakan TP saja.
+  individual_sl_points: 0        # 0 = tidak kirim SL ke broker
 
-  tp_mode: individual            # individual or group (group added later)
-  individual_tp_points: 300      # TP in MT5 points per position
-  individual_sl_enabled: true
-  individual_sl_points: 500      # SL in MT5 points per position
+  # ── Account 1 — M1 timeframe, max 3 layer ─────────────────────────────────
+  account1_max_layers: 3
+  account1_layer_distance_points: 200   # Adverse move antar layer Akun 1 (XAUUSD: ~$2.00)
+  account1_signal_type: fractal_sr      # fractal_sr | ema_cross | distance_only
+  account1_timeframe: M1
 
-  trailing_enabled: false        # Set to true to enable
-  trailing_start_points: 150     # Trailing activates after this profit
-  trailing_distance_points: 100  # Distance to maintain from price
-  trailing_step_points: 10       # Minimum step to move trailing stop
+  # ── Account 2 — M15 timeframe, aktivasi jika Akun 1 penuh ─────────────────
+  account2_max_layers: 3
+  account2_activate_distance_points: 400  # Adverse dari LAST layer Akun 1 → aktifkan Akun 2
+  account2_layer_distance_points: 300     # Adverse antar layer Akun 2 (XAUUSD: ~$3.00)
+  account2_signal_type: ema_cross         # fractal_sr | ema_cross | distance_only
+  account2_timeframe: M15
 
-  max_spread_points: 50          # Reject entry if spread > this
-  signal_max_age_seconds: 60     # Signals older than this are rejected
+  # ── Account 3 — M15 timeframe, aktivasi jika Akun 2 penuh ─────────────────
+  account3_max_layers: 3
+  account3_activate_distance_points: 500  # Adverse dari LAST layer Akun 2 → aktifkan Akun 3
+  account3_layer_distance_points: 400     # Adverse antar layer Akun 3 (XAUUSD: ~$4.00)
+  account3_signal_type: ema_cross         # fractal_sr | ema_cross | distance_only
+  account3_timeframe: M15
+
+  # ── Entry Confirmation Zone ────────────────────────────────────────────────
+  confirmation_zone_points: 30   # Price harus dalam zone ini dari S/R untuk konfirmasi entry
+
+  # ── Trailing Stop (opsional) ───────────────────────────────────────────────
+  trailing_enabled: false
+  trailing_start_points: 150
+  trailing_distance_points: 100
+  trailing_step_points: 10
+
+  # ── Execution Guard ────────────────────────────────────────────────────────
+  max_spread_points: 50          # Tolak entry jika spread > ini
+  signal_max_age_seconds: 60     # Sinyal lebih tua dari ini ditolak
   deviation_points: 10           # Allowed slippage on order execution
 
 risk:

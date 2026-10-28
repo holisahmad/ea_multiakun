@@ -1765,3 +1765,143 @@ html, body {
   color: var(--text-muted);
   font-weight: 600;
 }
+
+/* ── Layer Progress Bar ────────────────────────────────────── */
+.layer-progress-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-radius: var(--radius-sm);
+  margin: 6px 0;
+  border: 1px solid var(--border);
+}
+
+.layer-acct-group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+}
+
+.layer-acct-group.standby {
+  opacity: 0.42;
+}
+
+.layer-acct-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-muted);
+  min-width: 34px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.layer-dots {
+  display: flex;
+  gap: 4px;
+}
+
+.layer-dot {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  border: 1.5px solid var(--border);
+}
+
+.layer-dot.active {
+  background: var(--cyan);
+  border-color: var(--cyan);
+  box-shadow: 0 0 5px rgba(0, 200, 200, 0.5);
+}
+
+.layer-dot.empty {
+  background: transparent;
+  border-color: rgba(255,255,255,0.2);
+}
+
+.layer-count-text {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  min-width: 22px;
+}
+
+/* ── Exit Mode Pill ───────────────────────────────────────── */
+.exit-mode-pill {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+
+.exit-mode-pill.individual {
+  background: rgba(0, 200, 83, 0.15);
+  color: var(--green);
+  border: 1px solid rgba(0, 200, 83, 0.3);
+}
+
+.exit-mode-pill.basket {
+  background: rgba(255, 193, 7, 0.15);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+/* ── Strategy Panel ───────────────────────────────────────── */
+#strategyPanel {
+  background: rgba(0, 0, 0, 0.2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.strategy-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+.strategy-mode-badge {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 8px;
+  background: rgba(0, 212, 255, 0.15);
+  color: var(--cyan);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 4px;
+}
+
+.strategy-tp-sl {
+  color: var(--text-secondary);
+  font-size: 11px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.strategy-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.strategy-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.strategy-val {
+  font-size: 10px;
+  color: var(--text-muted);
+}

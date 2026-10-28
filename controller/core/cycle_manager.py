@@ -2,7 +2,15 @@
 core/cycle_manager.py — Cycle state machine for STMA.
 
 Manages the lifecycle of a trading cycle from IDLE to COMPLETED.
-State transitions are explicit, persisted, and auditable.
+Supports hierarchical multi-layer strategy: each account can have up to
+max_layers positions, with account escalation when current account is full.
+
+State flow (multi-layer):
+  IDLE → SIGNAL_VALIDATED
+  → ACCOUNT_1_PENDING → ACCOUNT_1_ACTIVE   (layer 1,2,3 on same account)
+  → ACCOUNT_2_PENDING → ACCOUNT_2_ACTIVE   (activates when acct1 is full)
+  → ACCOUNT_3_PENDING → ACCOUNT_3_ACTIVE   (activates when acct2 is full)
+  → CLOSING → COMPLETED
 """
 from __future__ import annotations
 
@@ -28,6 +36,7 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
     "SIGNAL_VALIDATED": ["ACCOUNT_1_PENDING", "ACCOUNT_2_PENDING", "ACCOUNT_3_PENDING", "FAILED_REQUIRES_OPERATOR"],
     "ACCOUNT_1_PENDING": ["ACCOUNT_1_ACTIVE", "FAILED_REQUIRES_OPERATOR", "RECOVERY", "CLOSING", "COMPLETED"],
     "ACCOUNT_1_ACTIVE": [
+        "ACCOUNT_1_ACTIVE",    # additional layer on same account
         "ACCOUNT_2_ELIGIBLE",
         "ACCOUNT_2_PENDING",
         "ACCOUNT_3_PENDING",
@@ -40,6 +49,7 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
     "ACCOUNT_2_ELIGIBLE": ["ACCOUNT_2_PENDING", "ACCOUNT_1_ACTIVE", "CLOSING", "PROTECTION", "COMPLETED"],
     "ACCOUNT_2_PENDING": ["ACCOUNT_2_ACTIVE", "ACCOUNT_1_ACTIVE", "FAILED_REQUIRES_OPERATOR", "RECOVERY", "CLOSING", "COMPLETED"],
     "ACCOUNT_2_ACTIVE": [
+        "ACCOUNT_2_ACTIVE",    # additional layer on same account
         "ACCOUNT_3_ELIGIBLE",
         "ACCOUNT_3_PENDING",
         "CLOSING",
@@ -50,7 +60,14 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
     ],
     "ACCOUNT_3_ELIGIBLE": ["ACCOUNT_3_PENDING", "ACCOUNT_2_ACTIVE", "CLOSING", "PROTECTION", "COMPLETED"],
     "ACCOUNT_3_PENDING": ["ACCOUNT_3_ACTIVE", "ACCOUNT_2_ACTIVE", "FAILED_REQUIRES_OPERATOR", "RECOVERY", "CLOSING", "COMPLETED"],
-    "ACCOUNT_3_ACTIVE": ["CLOSING", "PROTECTION", "RECOVERY", "FAILED_REQUIRES_OPERATOR", "COMPLETED"],
+    "ACCOUNT_3_ACTIVE": [
+        "ACCOUNT_3_ACTIVE",    # additional layer on same account
+        "CLOSING",
+        "PROTECTION",
+        "RECOVERY",
+        "FAILED_REQUIRES_OPERATOR",
+        "COMPLETED",
+    ],
     "CLOSING": ["RECONCILIATION", "COMPLETED", "FAILED_REQUIRES_OPERATOR"],
     "RECONCILIATION": ["COMPLETED", "FAILED_REQUIRES_OPERATOR"],
     "RECOVERY": ["ACCOUNT_1_ACTIVE", "ACCOUNT_2_ACTIVE", "ACCOUNT_3_ACTIVE", "FAILED_REQUIRES_OPERATOR"],
@@ -62,6 +79,57 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+# ---------------------------------------------------------------------------
+# Layer count helpers
+# ---------------------------------------------------------------------------
+def get_layer_counts(cycle: Cycle) -> dict[str, int]:
+    """Parse layer_counts_json from cycle. Returns {account_alias: count}."""
+    if cycle.layer_counts_json:
+        try:
+            return json.loads(cycle.layer_counts_json)
+        except Exception:
+            pass
+    return {"account_1": 0, "account_2": 0, "account_3": 0}
+
+
+def set_layer_counts(db: Session, cycle: Cycle, counts: dict[str, int]) -> None:
+    """Persist layer counts to cycle."""
+    cycle.layer_counts_json = json.dumps(counts)
+    db.add(cycle)
+    db.commit()
+
+
+def increment_layer(db: Session, cycle: Cycle, account_alias: str) -> int:
+    """Increment layer count for an account. Returns the NEW layer number."""
+    counts = get_layer_counts(cycle)
+    counts[account_alias] = counts.get(account_alias, 0) + 1
+    set_layer_counts(db, cycle, counts)
+    return counts[account_alias]
+
+
+def get_account_layer_count(cycle: Cycle, account_alias: str) -> int:
+    """Get current layer count for a specific account in this cycle."""
+    return get_layer_counts(cycle).get(account_alias, 0)
+
+
+def get_max_layers_for_account(cfg: STMAConfig, account_alias: str) -> int:
+    """Get configured max layers for an account."""
+    if account_alias == "account_1":
+        return cfg.strategy.account1_max_layers
+    elif account_alias == "account_2":
+        return cfg.strategy.account2_max_layers
+    elif account_alias == "account_3":
+        return cfg.strategy.account3_max_layers
+    return 3
+
+
+def is_account_full(cycle: Cycle, cfg: STMAConfig, account_alias: str) -> bool:
+    """Return True if the account has reached its max layers in this cycle."""
+    current = get_account_layer_count(cycle, account_alias)
+    max_layers = get_max_layers_for_account(cfg, account_alias)
+    return current >= max_layers
 
 
 # ---------------------------------------------------------------------------
@@ -126,6 +194,9 @@ def create_cycle(
         symbol=cfg.strategy.symbol.upper(),
         direction=signal.direction,
         state="IDLE",
+        layer_counts_json=json.dumps({"account_1": 0, "account_2": 0, "account_3": 0}),
+        exit_mode=cfg.strategy.exit_mode,
+        basket_target_usd=cfg.strategy.basket_target_usd if cfg.strategy.exit_mode == "basket" else None,
     )
     db.add(cycle)
     db.commit()
@@ -188,11 +259,16 @@ def _make_command(
     if explicit_tp:
         final_tp = custom_tp
     else:
-        final_tp = cfg.strategy.individual_tp_points if cfg.strategy.tp_mode == "individual" else None
+        # Default: TP individual dari config; 0 jika basket mode
+        if cfg.strategy.exit_mode == "basket":
+            final_tp = None  # Basket mode: tidak set TP per posisi
+        else:
+            final_tp = cfg.strategy.individual_tp_points
 
     if explicit_sl:
         final_sl = custom_sl
     else:
+        # Default: NO SL (individual_sl_enabled=False by default)
         final_sl = cfg.strategy.individual_sl_points if cfg.strategy.individual_sl_enabled else None
 
     final_vol = custom_vol if custom_vol is not None and custom_vol > 0 else account.default_lot
@@ -236,7 +312,7 @@ def _make_command(
 
 
 # ---------------------------------------------------------------------------
-# Stage 1: submit entry for primary account
+# Stage 1: submit entry for primary account (Layer 1)
 # ---------------------------------------------------------------------------
 def initiate_stage1(
     db: Session,
@@ -245,7 +321,7 @@ def initiate_stage1(
     spread_points: Optional[float] = None,
 ) -> Command:
     """
-    Evaluate risk and create OPEN command for primary account.
+    Evaluate risk and create OPEN command for primary account Layer 1.
     Transitions cycle: SIGNAL_VALIDATED → ACCOUNT_1_PENDING.
     """
     primary = cfg.primary_account()
@@ -263,17 +339,79 @@ def initiate_stage1(
             f"Risk engine denied stage 1 entry: {risk_result.reasons_denied}"
         )
 
+    # Increment layer counter
+    layer_num = increment_layer(db, cycle, primary.alias)
+
     action = f"OPEN_{cycle.direction}"
-    cmd = _make_command(db, cfg, cycle, primary, action, layer=1)
+    cmd = _make_command(db, cfg, cycle, primary, action, layer=layer_num)
 
     transition_cycle_state(
         db, cycle, "ACCOUNT_1_PENDING",
         trigger="stage1_command_created",
-        detail=f"cmd_id={cmd.id}",
+        detail=f"cmd_id={cmd.id} layer={layer_num}",
     )
     return cmd
 
 
+# ---------------------------------------------------------------------------
+# initiate_next_layer: add next layer to SAME account (intra-account DCA)
+# ---------------------------------------------------------------------------
+def initiate_next_layer(
+    db: Session,
+    cfg: STMAConfig,
+    cycle: Cycle,
+    account: AccountConfig,
+    spread_points: Optional[float] = None,
+) -> Optional[Command]:
+    """
+    Add another layer to the SAME account. Called by stage_evaluator when
+    adverse price movement threshold is met and signal confirmation is OK.
+
+    Returns Command if approved, None if account is full or risk denied.
+    """
+    if is_account_full(cycle, cfg, account.alias):
+        logger.info(
+            "Account %s is at max layers (%d) in cycle %s",
+            account.alias, get_max_layers_for_account(cfg, account.alias), cycle.id
+        )
+        return None
+
+    risk_result = approve_entry(db, cfg, account, spread_points)
+    if not risk_result.allowed:
+        logger.warning("Next-layer risk denied for %s: %s", account.alias, risk_result.reasons_denied)
+        return None
+
+    layer_num = increment_layer(db, cycle, account.alias)
+    action = f"OPEN_{cycle.direction}"
+    cmd = _make_command(db, cfg, cycle, account, action, layer=layer_num)
+
+    # State stays ACCOUNT_X_ACTIVE — just add layer, no state change needed
+    # (ACCOUNT_1_ACTIVE → ACCOUNT_1_ACTIVE transition is allowed)
+    account_num = "1" if account.role == "primary" else ("2" if account.role == "secondary" else "3")
+    current_state = f"ACCOUNT_{account_num}_ACTIVE"
+    if cycle.state == current_state:
+        # Re-transition to same state for audit trail
+        try:
+            transition_cycle_state(
+                db, cycle, current_state,
+                trigger=f"layer{layer_num}_added",
+                detail=f"cmd_id={cmd.id} account={account.alias}",
+            )
+        except ValueError:
+            # Same state transition may not be in valid list — just log
+            logger.info("Layer %d added to %s (no state change)", layer_num, account.alias)
+            db.commit()
+
+    logger.info(
+        "Layer %d added to %s in cycle %s | cmd_id=%s",
+        layer_num, account.alias, cycle.id, cmd.id
+    )
+    return cmd
+
+
+# ---------------------------------------------------------------------------
+# Manual entry: user sends order to chosen account
+# ---------------------------------------------------------------------------
 def initiate_manual_entry(
     db: Session,
     cfg: STMAConfig,
@@ -282,7 +420,8 @@ def initiate_manual_entry(
     spread_points: Optional[float] = None,
 ) -> Command:
     """
-    Evaluate risk and create OPEN command for the chosen account (account_1, account_2, or account_3).
+    Evaluate risk and create OPEN command for the chosen account.
+    Supports multi-layer: if account already has positions, adds next layer.
     """
     account = cfg.get_account(target_alias)
     if account is None:
@@ -302,23 +441,38 @@ def initiate_manual_entry(
             f"Risk engine menolak entry di {account.alias}: {'; '.join(risk_result.reasons_denied)}"
         )
 
-    layer = 1
+    # Increment layer for this account
+    layer_num = increment_layer(db, cycle, account.alias)
+
     pending_state = "ACCOUNT_1_PENDING"
+    active_state = "ACCOUNT_1_ACTIVE"
     if account.alias == "account_2" or account.role == "secondary":
-        layer = 2
         pending_state = "ACCOUNT_2_PENDING"
+        active_state = "ACCOUNT_2_ACTIVE"
     elif account.alias == "account_3" or account.role == "tertiary":
-        layer = 3
         pending_state = "ACCOUNT_3_PENDING"
+        active_state = "ACCOUNT_3_ACTIVE"
 
     action = f"OPEN_{cycle.direction}"
-    cmd = _make_command(db, cfg, cycle, account, action, layer=layer)
+    cmd = _make_command(db, cfg, cycle, account, action, layer=layer_num)
 
-    transition_cycle_state(
-        db, cycle, pending_state,
-        trigger=f"manual_{account.alias}_command_created",
-        detail=f"cmd_id={cmd.id}",
-    )
+    # If cycle is already in ACTIVE state for this account, stay in ACTIVE
+    if cycle.state == active_state:
+        try:
+            transition_cycle_state(
+                db, cycle, active_state,
+                trigger=f"manual_layer{layer_num}_{account.alias}",
+                detail=f"cmd_id={cmd.id}",
+            )
+        except ValueError:
+            logger.info("Staying in %s after manual layer add", active_state)
+            db.commit()
+    else:
+        transition_cycle_state(
+            db, cycle, pending_state,
+            trigger=f"manual_{account.alias}_command_created",
+            detail=f"cmd_id={cmd.id} layer={layer_num}",
+        )
     return cmd
 
 
@@ -336,6 +490,8 @@ def evaluate_stage2(
 ) -> Optional[Command]:
     """
     Evaluate stage 2 eligibility.
+    First try to add another layer to Account 1 (if not full).
+    Then escalate to Account 2 if Account 1 is full.
 
     Returns a Command if eligible and approved, or None if not eligible yet.
     """
@@ -343,54 +499,71 @@ def evaluate_stage2(
         logger.debug("Stage 2 not evaluable in state %s", cycle.state)
         return None
 
+    primary = cfg.primary_account()
     secondary = cfg.secondary_account()
-    if secondary is None or not secondary.enabled:
-        logger.info("No secondary account configured; skipping stage 2")
-        return None
 
-    # Price distance check
     if cycle.direction == "BUY":
         distance = (stage1_entry_price - current_price) / _get_point_value()
     else:  # SELL
         distance = (current_price - stage1_entry_price) / _get_point_value()
 
-    if distance < cfg.strategy.stage2_distance_points:
+    # ── Attempt: add next layer to Account 1 first ──────────────────────────
+    if primary and not is_account_full(cycle, cfg, primary.alias):
+        layer_dist = cfg.strategy.account1_layer_distance_points
+        if distance >= layer_dist:
+            # Hybrid confirmation check
+            if cfg.strategy.entry_model == "hybrid" and not support_confirmed:
+                logger.info(
+                    "Account 1 layer distance reached (%.1f pts) but confirmation not met",
+                    distance,
+                )
+                return None
+            cmd = initiate_next_layer(db, cfg, cycle, primary, spread_points)
+            if cmd:
+                return cmd
+
+    # ── Account 1 is full or layer distance not met → try Account 2 escalation ──
+    if secondary is None or not secondary.enabled:
+        logger.info("No secondary account configured; skipping stage 2 escalation")
+        return None
+
+    acct2_dist = cfg.strategy.account2_activate_distance_points
+    if distance < acct2_dist:
         logger.debug(
-            "Stage 2 distance not reached: %.1f < %d points",
-            distance, cfg.strategy.stage2_distance_points,
+            "Account 2 activation distance not reached: %.1f < %d points",
+            distance, acct2_dist,
         )
-        # Transition to ELIGIBLE marker if not already
         if cycle.state == "ACCOUNT_1_ACTIVE":
-            # Not yet eligible — wait
-            pass
+            pass  # Wait
         return None
 
     # Mark eligible
     if cycle.state == "ACCOUNT_1_ACTIVE":
         transition_cycle_state(
             db, cycle, "ACCOUNT_2_ELIGIBLE",
-            trigger="stage2_distance_reached",
+            trigger="account2_distance_reached",
             detail=f"distance={distance:.1f} pts price={current_price}",
         )
 
-    # Hybrid confirmation check
+    # Hybrid confirmation for account 2
     if cfg.strategy.entry_model == "hybrid" and not support_confirmed:
-        logger.info("Stage 2 distance reached but support confirmation not yet met")
+        logger.info("Account 2 eligible but support confirmation not yet met")
         return None
 
     # Risk check
     risk_result = approve_entry(db, cfg, secondary, spread_points)
     if not risk_result.allowed:
-        logger.warning("Stage 2 risk denied: %s", risk_result.reasons_denied)
+        logger.warning("Account 2 risk denied: %s", risk_result.reasons_denied)
         return None
 
+    layer_num = increment_layer(db, cycle, secondary.alias)
     action = f"OPEN_{cycle.direction}"
-    cmd = _make_command(db, cfg, cycle, secondary, action, layer=1)
+    cmd = _make_command(db, cfg, cycle, secondary, action, layer=layer_num)
 
     transition_cycle_state(
         db, cycle, "ACCOUNT_2_PENDING",
-        trigger="stage2_command_created",
-        detail=f"cmd_id={cmd.id}",
+        trigger="account2_command_created",
+        detail=f"cmd_id={cmd.id} layer={layer_num}",
     )
     return cmd
 
@@ -407,26 +580,48 @@ def evaluate_stage3(
     spread_points: Optional[float] = None,
     support_confirmed: bool = False,
 ) -> Optional[Command]:
-    """Evaluate stage 3 eligibility. Mirror of evaluate_stage2."""
+    """
+    Evaluate stage 3 eligibility.
+    First try to add another layer to Account 2 (if not full).
+    Then escalate to Account 3 if Account 2 is full.
+    """
     if cycle.state not in ("ACCOUNT_2_ACTIVE", "ACCOUNT_3_ELIGIBLE"):
         return None
 
+    secondary = cfg.secondary_account()
     tertiary = cfg.tertiary_account()
-    if tertiary is None or not tertiary.enabled:
-        return None
 
     if cycle.direction == "BUY":
         distance = (stage2_entry_price - current_price) / _get_point_value()
     else:
         distance = (current_price - stage2_entry_price) / _get_point_value()
 
-    if distance < cfg.strategy.stage3_distance_points:
+    # ── Attempt: add next layer to Account 2 first ──────────────────────────
+    if secondary and not is_account_full(cycle, cfg, secondary.alias):
+        layer_dist = cfg.strategy.account2_layer_distance_points
+        if distance >= layer_dist:
+            if cfg.strategy.entry_model == "hybrid" and not support_confirmed:
+                logger.info(
+                    "Account 2 layer distance reached (%.1f pts) but confirmation not met",
+                    distance,
+                )
+                return None
+            cmd = initiate_next_layer(db, cfg, cycle, secondary, spread_points)
+            if cmd:
+                return cmd
+
+    # ── Account 2 is full → try Account 3 escalation ────────────────────────
+    if tertiary is None or not tertiary.enabled:
+        return None
+
+    acct3_dist = cfg.strategy.account3_activate_distance_points
+    if distance < acct3_dist:
         return None
 
     if cycle.state == "ACCOUNT_2_ACTIVE":
         transition_cycle_state(
             db, cycle, "ACCOUNT_3_ELIGIBLE",
-            trigger="stage3_distance_reached",
+            trigger="account3_distance_reached",
             detail=f"distance={distance:.1f} pts price={current_price}",
         )
 
@@ -435,22 +630,23 @@ def evaluate_stage3(
 
     risk_result = approve_entry(db, cfg, tertiary, spread_points)
     if not risk_result.allowed:
-        logger.warning("Stage 3 risk denied: %s", risk_result.reasons_denied)
+        logger.warning("Account 3 risk denied: %s", risk_result.reasons_denied)
         return None
 
+    layer_num = increment_layer(db, cycle, tertiary.alias)
     action = f"OPEN_{cycle.direction}"
-    cmd = _make_command(db, cfg, cycle, tertiary, action, layer=1)
+    cmd = _make_command(db, cfg, cycle, tertiary, action, layer=layer_num)
 
     transition_cycle_state(
         db, cycle, "ACCOUNT_3_PENDING",
-        trigger="stage3_command_created",
-        detail=f"cmd_id={cmd.id}",
+        trigger="account3_command_created",
+        detail=f"cmd_id={cmd.id} layer={layer_num}",
     )
     return cmd
 
 
 # ---------------------------------------------------------------------------
-# Acknowledge stage n active
+# Acknowledge account layers active
 # ---------------------------------------------------------------------------
 def mark_account_active(db: Session, cycle: Cycle, stage: int) -> None:
     state_map = {1: "ACCOUNT_1_ACTIVE", 2: "ACCOUNT_2_ACTIVE", 3: "ACCOUNT_3_ACTIVE"}
@@ -461,6 +657,47 @@ def mark_account_active(db: Session, cycle: Cycle, stage: int) -> None:
         db, cycle, new_state,
         trigger=f"stage{stage}_execution_confirmed",
     )
+
+
+# ---------------------------------------------------------------------------
+# Basket exit check: close all if total P/L >= basket_target_usd
+# ---------------------------------------------------------------------------
+def check_basket_exit(
+    db: Session,
+    cfg: STMAConfig,
+    cycle: Cycle,
+) -> bool:
+    """
+    Check if basket exit condition is met.
+    Returns True if close was initiated, False otherwise.
+    """
+    if cycle.exit_mode != "basket":
+        return False
+
+    target = cycle.basket_target_usd or cfg.strategy.basket_target_usd
+    if not target:
+        return False
+
+    # Sum all floating PnL from managed positions in this cycle
+    positions = (
+        db.query(PositionSnapshot)
+        .filter(
+            PositionSnapshot.cycle_id == cycle.id,
+            PositionSnapshot.is_managed == True,
+        )
+        .all()
+    )
+    total_floating = sum(p.floating_pnl or 0 for p in positions)
+
+    if total_floating >= target:
+        logger.info(
+            "Basket target reached: %.2f >= %.2f | initiating close | cycle=%s",
+            total_floating, target, cycle.id
+        )
+        initiate_close(db, cfg, cycle, reason="basket_target_reached")
+        return True
+
+    return False
 
 
 # ---------------------------------------------------------------------------

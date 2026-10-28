@@ -207,6 +207,9 @@ class CycleSummary(BaseModel):
     total_positions: int
     floating_pnl_usd: float
     realized_pnl_usd: float
+    exit_mode: str = "individual"
+    basket_target_usd: Optional[float] = None
+    layer_counts: Optional[dict] = None  # {"account_1": 2, "account_2": 0, "account_3": 0}
 
 
 # ---------------------------------------------------------------------------

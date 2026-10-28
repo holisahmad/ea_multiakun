@@ -30,6 +30,7 @@ let isConnected = false;
 let refreshTimer = null;
 let pendingAction = null;
 let activeLogFilter = 'all';
+let strategyConfig = null; // Cached strategy config from server
 
 // Pagination state
 let currentTradePage = 1;
@@ -157,12 +158,60 @@ async function refreshAll() {
       loadCommands(),
       loadRiskEvents(),
       loadSystemEvents(),
+      loadStrategyConfig(),
     ]);
     setConnectionState(true);
   } catch (err) {
     setConnectionState(false);
     console.warn('Refresh error:', err.message);
   }
+}
+
+// ── Strategy Config ────────────────────────────────────────
+let strategyConfig = null;
+
+async function loadStrategyConfig() {
+  try {
+    strategyConfig = await apiFetch('/dashboard/strategy');
+    renderStrategyPanel();
+  } catch (e) {
+    // non-critical
+  }
+}
+
+function renderStrategyPanel() {
+  const el = document.getElementById('strategyPanel');
+  if (!el || !strategyConfig) return;
+
+  const s = strategyConfig;
+  const exitModeLabel = s.exit_mode === 'basket'
+    ? `🧺 Basket ($${s.basket_target_usd})`
+    : '📍 Individual TP';
+
+  const acctRows = (s.accounts || []).map(a => {
+    const alias = a.alias;
+    const name = alias === 'account_1' ? 'Akun 1' : (alias === 'account_2' ? 'Akun 2' : 'Akun 3');
+    const tf = a.timeframe || 'M1';
+    const sig = a.signal_type === 'fractal_sr' ? 'Fractal S/R' : (a.signal_type === 'ema_cross' ? 'EMA Cross' : 'Distance Only');
+    const dist = a.layer_distance_points || '—';
+    const actDist = a.activate_distance_points ? ` (aktivasi: ${a.activate_distance_points} pts)` : ' (Primary)';
+    return `<div class="strategy-row">
+      <span class="strategy-label">${name} · ${tf}</span>
+      <span class="strategy-val">Max ${a.max_layers} layer · ${dist} pts/layer · ${sig}${actDist}</span>
+    </div>`;
+  }).join('');
+
+  el.innerHTML = `
+    <div class="strategy-header">
+      <span>⚙️ Strategi Aktif</span>
+      <span class="strategy-mode-badge">${exitModeLabel}</span>
+    </div>
+    <div class="strategy-tp-sl">
+      TP Default: <strong>${s.individual_tp_points} pts</strong> &nbsp;|&nbsp;
+      SL: <strong>${s.individual_sl_enabled ? s.individual_sl_points + ' pts' : 'Tidak Ada'}</strong>
+    </div>
+    ${acctRows}
+  `;
 }
 
 // ── Trading Performance Summary ────────────────────────────
@@ -393,14 +442,48 @@ async function loadCycles() {
       const age = Math.round((Date.now() - new Date(c.started_at).getTime()) / 1000);
       const ageStr = age < 60 ? `${age}d` : age < 3600 ? `${Math.round(age/60)}m` : `${Math.round(age/3600)}j`;
 
+      // ── Layer progress dots ──
+      const lc = c.layer_counts || {};
+      const cfg = strategyConfig;
+      const maxA1 = cfg ? (cfg.accounts[0]?.max_layers || 3) : 3;
+      const maxA2 = cfg ? (cfg.accounts[1]?.max_layers || 3) : 3;
+      const maxA3 = cfg ? (cfg.accounts[2]?.max_layers || 3) : 3;
+      const l1 = lc.account_1 || 0, l2 = lc.account_2 || 0, l3 = lc.account_3 || 0;
+      function layerDots(count, max) {
+        let d = '';
+        for (let i = 1; i <= max; i++) d += `<span class="layer-dot ${i <= count ? 'active' : 'empty'}"></span>`;
+        return d;
+      }
+      const exitBadge = (c.exit_mode === 'basket')
+        ? `<span class="exit-mode-pill basket">&#129516; Basket</span>`
+        : `<span class="exit-mode-pill individual">&#128205; Individual</span>`;
+
       return `
       <div class="cycle-card-mobile">
         <div class="cycle-card-top">
-          <div style="display:flex;align-items:center;gap:6px">
+          <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
             <span class="cycle-id-badge">Siklus #${c.cycle_id.slice(0, 8)}</span>
             <span class="dir-badge ${dirClass}">${c.direction}</span>
+            ${exitBadge}
           </div>
           <span class="state-pill">${c.state}</span>
+        </div>
+        <div class="layer-progress-bar">
+          <div class="layer-acct-group">
+            <span class="layer-acct-label">A1&middot;M1</span>
+            <div class="layer-dots">${layerDots(l1, maxA1)}</div>
+            <span class="layer-count-text">${l1}/${maxA1}</span>
+          </div>
+          <div class="layer-acct-group${l1 < maxA1 ? ' standby' : ''}">
+            <span class="layer-acct-label">A2&middot;M15</span>
+            <div class="layer-dots">${layerDots(l2, maxA2)}</div>
+            <span class="layer-count-text">${l2}/${maxA2}</span>
+          </div>
+          <div class="layer-acct-group${l2 < maxA2 ? ' standby' : ''}">
+            <span class="layer-acct-label">A3&middot;M15</span>
+            <div class="layer-dots">${layerDots(l3, maxA3)}</div>
+            <span class="layer-count-text">${l3}/${maxA3}</span>
+          </div>
         </div>
         <div class="cycle-card-body">
           <div class="cycle-details-left">
@@ -411,7 +494,7 @@ async function loadCycles() {
           <div class="cycle-pnl-val ${pnlClass}">${pnlStr} USD</div>
         </div>
         <button class="cycle-btn-close" onclick="closeCycle('${c.cycle_id}')">
-          ✕ Tutup Semua Posisi Siklus Ini
+          &#10005; Tutup Semua Posisi Siklus Ini
         </button>
       </div>`;
     }).join('');

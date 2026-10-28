@@ -103,25 +103,30 @@ def validate_and_store_signal(
             target_account = (payload or {}).get("target_account") if payload else None
             if is_manual and target_account:
                 from ..database.models import PositionSnapshot
-                existing_pos = (
-                    db.query(PositionSnapshot)
-                    .filter(
-                        PositionSnapshot.cycle_id == active_cycle.id,
-                        PositionSnapshot.account_alias == target_account,
-                        PositionSnapshot.is_managed == True,
-                    )
-                    .first()
-                )
-                if not existing_pos:
+                from .cycle_manager import get_account_layer_count, get_max_layers_for_account
+                from ..config import load_config
+                _cfg = load_config()
+
+                current_layer_count = get_account_layer_count(active_cycle, target_account)
+                max_layers = get_max_layers_for_account(_cfg, target_account)
+
+                if current_layer_count < max_layers:
                     signal.status = "ACCEPTED"
                     logger.info(
-                        "Manual signal accepted for layer | target=%s cycle=%s",
-                        target_account, active_cycle.id,
+                        "Manual signal accepted for layer %d/%d | target=%s cycle=%s",
+                        current_layer_count + 1, max_layers, target_account, active_cycle.id,
                     )
                     db.add(signal)
                     db.commit()
                     db.refresh(signal)
                     return signal
+                else:
+                    # Account is full, check if other accounts are available
+                    reject_reason = (
+                        f"Akun {target_account} sudah penuh ({current_layer_count}/{max_layers} layers). "
+                        f"Pilih akun lain atau tunggu posisi ditutup."
+                    )
+                    raise SignalValidationError(reject_reason)
 
             reject_reason = (
                 f"Siklus aktif sedang berjalan ({active_cycle.state}). "
