@@ -168,8 +168,6 @@ async function refreshAll() {
 }
 
 // ── Strategy Config ────────────────────────────────────────
-let strategyConfig = null;
-
 async function loadStrategyConfig() {
   try {
     strategyConfig = await apiFetch('/dashboard/strategy');
