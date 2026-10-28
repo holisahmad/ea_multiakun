@@ -164,21 +164,37 @@ def _make_command(
     custom_tp = None
     custom_sl = None
     custom_vol = None
+    explicit_tp = False
+    explicit_sl = False
+
     if cycle and cycle.signal and cycle.signal.payload_json:
         try:
             sig_payload = json.loads(cycle.signal.payload_json)
             if isinstance(sig_payload, dict):
-                if "tp_points" in sig_payload and sig_payload["tp_points"] is not None:
-                    custom_tp = int(sig_payload["tp_points"])
-                if "sl_points" in sig_payload and sig_payload["sl_points"] is not None:
-                    custom_sl = int(sig_payload["sl_points"])
+                if "tp_points" in sig_payload:
+                    explicit_tp = True
+                    val = sig_payload["tp_points"]
+                    custom_tp = int(val) if val is not None and int(val) > 0 else 0
+                if "sl_points" in sig_payload:
+                    explicit_sl = True
+                    val = sig_payload["sl_points"]
+                    custom_sl = int(val) if val is not None and int(val) > 0 else 0
                 if "volume" in sig_payload and sig_payload["volume"] is not None:
                     custom_vol = float(sig_payload["volume"])
         except Exception:
             pass
 
-    final_tp = custom_tp if custom_tp is not None else (cfg.strategy.individual_tp_points if cfg.strategy.tp_mode == "individual" else None)
-    final_sl = custom_sl if custom_sl is not None else (cfg.strategy.individual_sl_points if cfg.strategy.individual_sl_enabled else None)
+    # Jika dispesifikasikan (termasuk 0 untuk tanpa TP/SL), hormati nilai tersebut
+    if explicit_tp:
+        final_tp = custom_tp
+    else:
+        final_tp = cfg.strategy.individual_tp_points if cfg.strategy.tp_mode == "individual" else None
+
+    if explicit_sl:
+        final_sl = custom_sl
+    else:
+        final_sl = cfg.strategy.individual_sl_points if cfg.strategy.individual_sl_enabled else None
+
     final_vol = custom_vol if custom_vol is not None and custom_vol > 0 else account.default_lot
 
     cmd = Command(

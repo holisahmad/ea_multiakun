@@ -1095,8 +1095,8 @@ async function sendManualOrderTrade(direction) {
             payload: {
               target_account: targetAccount,
               volume,
-              tp_points: tpPoints > 0 ? tpPoints : null,
-              sl_points: slPoints > 0 ? slPoints : null,
+              tp_points: tpPoints > 0 ? tpPoints : 0,
+              sl_points: slPoints > 0 ? slPoints : 0,
             }
           }),
         });
@@ -1178,8 +1178,8 @@ async function sendManualOrder(direction, prefix = 'order') {
             payload: {
               target_account: targetAccount,
               volume: volume,
-              tp_points: tpPoints > 0 ? tpPoints : null,
-              sl_points: slPoints > 0 ? slPoints : null,
+              tp_points: tpPoints > 0 ? tpPoints : 0,
+              sl_points: slPoints > 0 ? slPoints : 0,
             }
           }),
         });
