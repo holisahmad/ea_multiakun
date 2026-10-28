@@ -141,6 +141,34 @@
         </div>
       </div>
 
+      <!-- Manual Order Entry Panel -->
+      <div class="mobile-card order-panel-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">⚡</span>
+            <span class="head-title">Manual Order Entry</span>
+          </div>
+          <span class="card-tag tag-cyan">XAUUSD • 0.01 Lot</span>
+        </div>
+        <div class="card-subtext">Picu order manual Stage 1 langsung ke Akun Primary (TP: 300 poin, SL: 500 poin).</div>
+        <div class="manual-order-grid">
+          <button class="order-btn order-btn--buy" onclick="sendManualOrder('BUY')">
+            <span class="order-btn-icon">▲</span>
+            <div class="order-btn-content">
+              <span class="order-btn-main">BUY XAUUSD</span>
+              <span class="order-btn-sub">0.01 Lot • Primary</span>
+            </div>
+          </button>
+          <button class="order-btn order-btn--sell" onclick="sendManualOrder('SELL')">
+            <span class="order-btn-icon">▼</span>
+            <div class="order-btn-content">
+              <span class="order-btn-main">SELL XAUUSD</span>
+              <span class="order-btn-sub">0.01 Lot • Primary</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
       <!-- Account Summary Preview -->
       <div class="mobile-card">
         <div class="card-head">
@@ -175,6 +203,33 @@
 
     <!-- TAB 3: TRADES & CYCLES -->
     <div class="tab-pane" id="tab-trades">
+      <!-- Quick Manual Order in Trades -->
+      <div class="mobile-card order-panel-card">
+        <div class="card-head">
+          <div class="card-head-left">
+            <span class="head-icon">⚡</span>
+            <span class="head-title">Manual Order Entry</span>
+          </div>
+          <span class="card-tag tag-cyan">XAUUSD • 0.01 Lot</span>
+        </div>
+        <div class="manual-order-grid">
+          <button class="order-btn order-btn--buy" onclick="sendManualOrder('BUY')">
+            <span class="order-btn-icon">▲</span>
+            <div class="order-btn-content">
+              <span class="order-btn-main">BUY XAUUSD</span>
+              <span class="order-btn-sub">0.01 Lot • Primary</span>
+            </div>
+          </button>
+          <button class="order-btn order-btn--sell" onclick="sendManualOrder('SELL')">
+            <span class="order-btn-icon">▼</span>
+            <div class="order-btn-content">
+              <span class="order-btn-main">SELL XAUUSD</span>
+              <span class="order-btn-sub">0.01 Lot • Primary</span>
+            </div>
+          </button>
+        </div>
+      </div>
+
       <!-- Active Cycles Section -->
       <div class="mobile-card">
         <div class="card-head">

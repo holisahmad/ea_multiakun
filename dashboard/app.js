@@ -553,6 +553,50 @@ async function executeControl(action, target, confirm, label) {
   }
 }
 
+// ── Manual Order Entry ─────────────────────────────────────
+async function sendManualOrder(direction) {
+  const dir = direction.toUpperCase();
+  const icon = dir === 'BUY' ? '🟢' : '🔴';
+  const color = dir === 'BUY' ? 'var(--green)' : 'var(--red)';
+
+  showModal(
+    icon,
+    `Konfirmasi Manual ${dir} Order`,
+    `Eksekusi order ${dir} XAUUSD pada Akun 1 (Primary):\n\n• Simbol: XAUUSD\n• Volume: 0.01 Lot\n• Take Profit: 300 Poin (30 pips)\n• Stop Loss: 500 Poin (50 pips)\n\nLanjutkan eksekusi ke broker?`,
+    async () => {
+      try {
+        toast(`Mengirim order ${dir} XAUUSD...`, 'info');
+        const res = await apiFetch('/signal', {
+          method: 'POST',
+          body: JSON.stringify({
+            strategy_id: 'stma-xau-v1',
+            symbol: 'XAUUSD',
+            direction: dir,
+            source: 'dashboard-manual',
+            price: null
+          }),
+        });
+
+        if (res.status === 'ACCEPTED') {
+          toast(`✓ Order ${dir} Berhasil! Perintah dikirim ke MT5 account_1.`, 'success');
+        } else if (res.status === 'RISK_DENIED') {
+          toast(`Ditolak Risk Engine: ${res.message}`, 'error');
+        } else {
+          toast(`Sinyal ${res.status}: ${res.message || 'Tidak dapat diproses'}`, 'warning');
+        }
+        setTimeout(refreshAll, 800);
+      } catch (err) {
+        toast(`Gagal: ${err.message}`, 'error');
+      }
+    }
+  );
+
+  const confirmBtn = document.getElementById('modalConfirmBtn');
+  if (confirmBtn) {
+    confirmBtn.style.background = color;
+  }
+}
+
 // ── Settings Save ──────────────────────────────────────────
 function saveSettings() {
   const urlInput = document.getElementById('serverUrlInput');

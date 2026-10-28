@@ -577,6 +577,83 @@ html, body {
   font-weight: 600;
 }
 
+/* ── MANUAL ORDER BUTTONS & CARD ── */
+.order-panel-card {
+  border-left: 3px solid var(--primary-light);
+}
+
+.manual-order-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.order-btn {
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  font-family: inherit;
+  user-select: none;
+}
+
+.order-btn:active {
+  transform: scale(0.97);
+}
+
+.order-btn--buy {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.18) 0%, rgba(16, 185, 129, 0.06) 100%);
+  border-color: rgba(16, 185, 129, 0.35);
+  color: #34d399;
+}
+
+.order-btn--buy:hover {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.28) 0%, rgba(16, 185, 129, 0.12) 100%);
+  border-color: rgba(16, 185, 129, 0.6);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.18);
+}
+
+.order-btn--sell {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.18) 0%, rgba(239, 68, 68, 0.06) 100%);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #f87171;
+}
+
+.order-btn--sell:hover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.28) 0%, rgba(239, 68, 68, 0.12) 100%);
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow: 0 4px 14px rgba(239, 68, 68, 0.18);
+}
+
+.order-btn-icon {
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.order-btn-content {
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+}
+
+.order-btn-main {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.order-btn-sub {
+  font-size: 10px;
+  opacity: 0.8;
+  font-weight: 500;
+}
+
 .acc-card-top {
   display: flex;
   align-items: center;
