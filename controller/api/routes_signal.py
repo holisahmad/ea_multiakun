@@ -14,7 +14,8 @@ from ..config import STMAConfig, get_config
 from ..database.db import get_db
 from ..core.schemas import SignalRequest, SignalResponse
 from ..core.signal_handler import validate_and_store_signal, SignalValidationError
-from ..core.cycle_manager import create_cycle, initiate_stage1
+from ..core.cycle_manager import create_cycle, initiate_stage1, initiate_manual_entry
+from ..database.models import Cycle
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/signal", tags=["signal"])
@@ -67,17 +68,43 @@ def receive_signal(
             message=str(exc),
         )
 
-    # Create cycle and attempt stage 1
-    try:
-        cycle = create_cycle(db=db, cfg=cfg, signal=signal)
-        cmd = initiate_stage1(db=db, cfg=cfg, cycle=cycle)
-        return SignalResponse(
-            signal_id=signal.id,
-            status="ACCEPTED",
-            message=f"Cycle {cycle.id} created. Stage 1 command {cmd.id} queued.",
+    # Create cycle or attach layer
+    target_account = (body.payload or {}).get("target_account") if body.payload else None
+
+    active_cycle = (
+        db.query(Cycle)
+        .filter(
+            Cycle.strategy_id == body.strategy_id,
+            Cycle.symbol == body.symbol.upper(),
+            Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED", "FAILED"]),
         )
+        .first()
+    )
+
+    try:
+        if active_cycle and target_account and target_account != "account_1":
+            cycle = active_cycle
+            cmd = initiate_manual_entry(db=db, cfg=cfg, cycle=cycle, target_alias=target_account)
+            acc_name = "Akun 2 (Secondary)" if target_account == "account_2" else ("Akun 3 (Tertiary)" if target_account == "account_3" else target_account)
+            return SignalResponse(
+                signal_id=signal.id,
+                status="ACCEPTED",
+                message=f"Order manual berhasil dikirim ke {acc_name}. Perintah #{cmd.id} sedang dikirim ke MT5.",
+            )
+        else:
+            cycle = create_cycle(db=db, cfg=cfg, signal=signal)
+            cmd = initiate_manual_entry(
+                db=db, cfg=cfg, cycle=cycle, 
+                target_alias=target_account or "account_1"
+            )
+            acc_name = "Akun 1 (Primary)" if (target_account or "account_1") == "account_1" else ("Akun 2 (Secondary)" if target_account == "account_2" else "Akun 3 (Tertiary)")
+            return SignalResponse(
+                signal_id=signal.id,
+                status="ACCEPTED",
+                message=f"Order manual berhasil dikirim ke {acc_name}. Perintah #{cmd.id} sedang dikirim ke MT5.",
+            )
     except RuntimeError as exc:
-        logger.error("Stage 1 initiation failed: %s", exc)
+        logger.error("Entry initiation failed: %s", exc)
         return SignalResponse(
             signal_id=signal.id,
             status="RISK_DENIED",

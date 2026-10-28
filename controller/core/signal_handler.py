@@ -99,10 +99,33 @@ def validate_and_store_signal(
             .first()
         )
         if active_cycle:
+            is_manual = "manual" in (source or "").lower() or "dashboard" in (source or "").lower()
+            target_account = (payload or {}).get("target_account") if payload else None
+            if is_manual and target_account:
+                from ..database.models import PositionSnapshot
+                existing_pos = (
+                    db.query(PositionSnapshot)
+                    .filter(
+                        PositionSnapshot.cycle_id == active_cycle.id,
+                        PositionSnapshot.account_alias == target_account,
+                        PositionSnapshot.is_managed == True,
+                    )
+                    .first()
+                )
+                if not existing_pos:
+                    signal.status = "ACCEPTED"
+                    logger.info(
+                        "Manual signal accepted for layer | target=%s cycle=%s",
+                        target_account, active_cycle.id,
+                    )
+                    db.add(signal)
+                    db.commit()
+                    db.refresh(signal)
+                    return signal
+
             reject_reason = (
-                f"active cycle {active_cycle.id} already exists in state "
-                f"'{active_cycle.state}'. max_active_cycles_per_symbol="
-                f"{cfg.strategy.max_active_cycles_per_symbol}"
+                f"Siklus aktif sedang berjalan ({active_cycle.state}). "
+                f"Akun {target_account or 'Primary'} sudah memiliki posisi di siklus ini."
             )
             raise SignalValidationError(reject_reason)
 

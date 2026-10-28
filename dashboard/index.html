@@ -198,8 +198,18 @@
           </div>
           <span class="card-tag tag-cyan">XAUUSD • Stage 1</span>
         </div>
-        <div class="card-subtext">Picu order manual ke Akun Primary dengan custom Lot, Take Profit, dan Stop Loss (Dollar / Poin).</div>
+        <div class="card-subtext">Picu order manual ke Akun pilihan (Akun 1, 2, atau 3) dengan custom Lot, Take Profit, dan Stop Loss.</div>
         
+        <!-- Target Account Selection -->
+        <div class="order-acc-row">
+          <label class="order-input-lbl">Target Akun Eksekusi</label>
+          <select id="orderAccountSelect" class="order-select-account">
+            <option value="account_1">Akun 1 (Primary • Layer 1)</option>
+            <option value="account_2">Akun 2 (Secondary • Layer 2)</option>
+            <option value="account_3">Akun 3 (Tertiary • Layer 3)</option>
+          </select>
+        </div>
+
         <!-- TP/SL Unit Selector -->
         <div class="tpsl-unit-selector">
           <span class="unit-selector-lbl">Satuan Target TP / SL:</span>
@@ -291,7 +301,17 @@
           </div>
           <span class="card-tag tag-cyan">XAUUSD • Stage 1</span>
         </div>
-        <div class="card-subtext">Picu order manual ke Akun Primary dengan custom Lot, Take Profit, dan Stop Loss (Dollar / Poin).</div>
+        <div class="card-subtext">Picu order manual ke Akun pilihan (Akun 1, 2, atau 3) dengan custom Lot, Take Profit, dan Stop Loss.</div>
+
+        <!-- Target Account Selection (Trades tab) -->
+        <div class="order-acc-row">
+          <label class="order-input-lbl">Target Akun Eksekusi</label>
+          <select id="tradeAccountSelect" class="order-select-account">
+            <option value="account_1">Akun 1 (Primary • Layer 1)</option>
+            <option value="account_2">Akun 2 (Secondary • Layer 2)</option>
+            <option value="account_3">Akun 3 (Tertiary • Layer 3)</option>
+          </select>
+        </div>
 
         <!-- TP/SL Unit Selector (Trades tab) -->
         <div class="tpsl-unit-selector">

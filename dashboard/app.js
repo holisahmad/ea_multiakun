@@ -1034,6 +1034,10 @@ async function sendManualOrderTrade(direction) {
   const icon = dir === 'BUY' ? '🟢' : '🔴';
   const color = dir === 'BUY' ? 'var(--green)' : 'var(--red)';
 
+  const accSelect = document.getElementById('tradeAccountSelect');
+  const targetAccount = accSelect ? accSelect.value : 'account_1';
+  const accName = targetAccount === 'account_1' ? 'Akun 1 (Primary • Layer 1)' : (targetAccount === 'account_2' ? 'Akun 2 (Secondary • Layer 2)' : 'Akun 3 (Tertiary • Layer 3)');
+
   const lotInput = document.getElementById('tradeLotInput');
   const tpInput  = document.getElementById('tradeTpInput');
   const slInput  = document.getElementById('tradeSlInput');
@@ -1055,10 +1059,10 @@ async function sendManualOrderTrade(direction) {
   showModal(
     icon,
     `Konfirmasi Manual ${dir} Order`,
-    `Eksekusi order ${dir} XAUUSD pada Akun 1 (Primary):\n\n• Target: Akun 1 (Primary - Stage 1)\n• Simbol: XAUUSD\n• Volume: ${volume.toFixed(2)} Lot\n• Take Profit: ${tpDesc}\n• Stop Loss: ${slDesc}\n\nLanjutkan eksekusi ke broker?`,
+    `Eksekusi order ${dir} XAUUSD pada ${accName}:\n\n• Target: ${accName}\n• Simbol: XAUUSD\n• Volume: ${volume.toFixed(2)} Lot\n• Take Profit: ${tpDesc}\n• Stop Loss: ${slDesc}\n\nLanjutkan eksekusi ke broker?`,
     async () => {
       try {
-        toast(`Mengirim order ${dir} ${volume} lot...`, 'info');
+        toast(`Mengirim order ${dir} ${volume} lot ke ${accName}...`, 'info');
         const res = await apiFetch('/signal', {
           method: 'POST',
           body: JSON.stringify({
@@ -1068,6 +1072,7 @@ async function sendManualOrderTrade(direction) {
             source: 'dashboard-manual',
             price: null,
             payload: {
+              target_account: targetAccount,
               volume,
               tp_points: tpPoints > 0 ? tpPoints : null,
               sl_points: slPoints > 0 ? slPoints : null,
@@ -1075,7 +1080,7 @@ async function sendManualOrderTrade(direction) {
           }),
         });
         if (res.status === 'ACCEPTED') {
-          toast(`✓ Order ${dir} Berhasil Diterima! Perintah dikirim ke MT5 Akun 1.`, 'success');
+          toast(`✓ Order ${dir} Berhasil Diterima! Perintah dikirim ke MT5 ${accName}.`, 'success');
         } else if (res.status === 'RISK_DENIED') {
           toast(`Ditolak Risk Engine: ${res.message}`, 'error');
         } else {
@@ -1094,6 +1099,10 @@ async function sendManualOrder(direction, prefix = 'order') {
   const dir = direction.toUpperCase();
   const icon = dir === 'BUY' ? '🟢' : '🔴';
   const color = dir === 'BUY' ? 'var(--green)' : 'var(--red)';
+
+  const accSelect = document.getElementById(prefix + 'AccountSelect');
+  const targetAccount = accSelect ? accSelect.value : 'account_1';
+  const accName = targetAccount === 'account_1' ? 'Akun 1 (Primary • Layer 1)' : (targetAccount === 'account_2' ? 'Akun 2 (Secondary • Layer 2)' : 'Akun 3 (Tertiary • Layer 3)');
 
   const lotInput = document.getElementById(prefix + 'LotInput');
   const tpInput  = document.getElementById(prefix + 'TpInput');
@@ -1133,10 +1142,10 @@ async function sendManualOrder(direction, prefix = 'order') {
   showModal(
     icon,
     `Konfirmasi Manual ${dir} Order`,
-    `Eksekusi order ${dir} XAUUSD pada Akun 1 (Primary):\n\n• Target: Akun 1 (Primary - Stage 1)\n• Simbol: XAUUSD\n• Volume: ${volume.toFixed(2)} Lot\n• Take Profit: ${tpDesc}\n• Stop Loss: ${slDesc}\n\nLanjutkan eksekusi ke broker?`,
+    `Eksekusi order ${dir} XAUUSD pada ${accName}:\n\n• Target: ${accName}\n• Simbol: XAUUSD\n• Volume: ${volume.toFixed(2)} Lot\n• Take Profit: ${tpDesc}\n• Stop Loss: ${slDesc}\n\nLanjutkan eksekusi ke broker?`,
     async () => {
       try {
-        toast(`Mengirim order ${dir} ${volume} lot...`, 'info');
+        toast(`Mengirim order ${dir} ${volume} lot ke ${accName}...`, 'info');
         const res = await apiFetch('/signal', {
           method: 'POST',
           body: JSON.stringify({
@@ -1146,6 +1155,7 @@ async function sendManualOrder(direction, prefix = 'order') {
             source: 'dashboard-manual',
             price: null,
             payload: {
+              target_account: targetAccount,
               volume: volume,
               tp_points: tpPoints > 0 ? tpPoints : null,
               sl_points: slPoints > 0 ? slPoints : null,
@@ -1154,7 +1164,7 @@ async function sendManualOrder(direction, prefix = 'order') {
         });
 
         if (res.status === 'ACCEPTED') {
-          toast(`✓ Order ${dir} Berhasil Diterima! Perintah dikirim ke MT5 Akun 1.`, 'success');
+          toast(`✓ Order ${dir} Berhasil Diterima! Perintah dikirim ke MT5 ${accName}.`, 'success');
         } else if (res.status === 'RISK_DENIED') {
           toast(`Ditolak Risk Engine: ${res.message}`, 'error');
         } else {

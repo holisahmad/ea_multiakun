@@ -25,10 +25,12 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 VALID_TRANSITIONS: dict[str, list[str]] = {
     "IDLE": ["SIGNAL_VALIDATED"],
-    "SIGNAL_VALIDATED": ["ACCOUNT_1_PENDING", "FAILED_REQUIRES_OPERATOR"],
+    "SIGNAL_VALIDATED": ["ACCOUNT_1_PENDING", "ACCOUNT_2_PENDING", "ACCOUNT_3_PENDING", "FAILED_REQUIRES_OPERATOR"],
     "ACCOUNT_1_PENDING": ["ACCOUNT_1_ACTIVE", "FAILED_REQUIRES_OPERATOR", "RECOVERY", "CLOSING", "COMPLETED"],
     "ACCOUNT_1_ACTIVE": [
         "ACCOUNT_2_ELIGIBLE",
+        "ACCOUNT_2_PENDING",
+        "ACCOUNT_3_PENDING",
         "CLOSING",
         "PROTECTION",
         "RECOVERY",
@@ -39,6 +41,7 @@ VALID_TRANSITIONS: dict[str, list[str]] = {
     "ACCOUNT_2_PENDING": ["ACCOUNT_2_ACTIVE", "ACCOUNT_1_ACTIVE", "FAILED_REQUIRES_OPERATOR", "RECOVERY", "CLOSING", "COMPLETED"],
     "ACCOUNT_2_ACTIVE": [
         "ACCOUNT_3_ELIGIBLE",
+        "ACCOUNT_3_PENDING",
         "CLOSING",
         "PROTECTION",
         "RECOVERY",
@@ -250,6 +253,54 @@ def initiate_stage1(
     transition_cycle_state(
         db, cycle, "ACCOUNT_1_PENDING",
         trigger="stage1_command_created",
+        detail=f"cmd_id={cmd.id}",
+    )
+    return cmd
+
+
+def initiate_manual_entry(
+    db: Session,
+    cfg: STMAConfig,
+    cycle: Cycle,
+    target_alias: str = "account_1",
+    spread_points: Optional[float] = None,
+) -> Command:
+    """
+    Evaluate risk and create OPEN command for the chosen account (account_1, account_2, or account_3).
+    """
+    account = cfg.get_account(target_alias)
+    if account is None:
+        account = cfg.primary_account()
+    if account is None:
+        raise RuntimeError(f"Target account {target_alias} not found or configured")
+
+    risk_result = approve_entry(db, cfg, account, spread_points)
+    if not risk_result.allowed:
+        if cycle.state == "SIGNAL_VALIDATED":
+            transition_cycle_state(
+                db, cycle, "FAILED_REQUIRES_OPERATOR",
+                trigger=f"risk_denied_{account.alias}",
+                detail="; ".join(risk_result.reasons_denied),
+            )
+        raise RuntimeError(
+            f"Risk engine menolak entry di {account.alias}: {'; '.join(risk_result.reasons_denied)}"
+        )
+
+    layer = 1
+    pending_state = "ACCOUNT_1_PENDING"
+    if account.alias == "account_2" or account.role == "secondary":
+        layer = 2
+        pending_state = "ACCOUNT_2_PENDING"
+    elif account.alias == "account_3" or account.role == "tertiary":
+        layer = 3
+        pending_state = "ACCOUNT_3_PENDING"
+
+    action = f"OPEN_{cycle.direction}"
+    cmd = _make_command(db, cfg, cycle, account, action, layer=layer)
+
+    transition_cycle_state(
+        db, cycle, pending_state,
+        trigger=f"manual_{account.alias}_command_created",
         detail=f"cmd_id={cmd.id}",
     )
     return cmd
