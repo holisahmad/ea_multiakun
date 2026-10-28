@@ -15,7 +15,7 @@ app:
   timezone: Asia/Jakarta
 
 server:
-  host: "127.0.0.1"
+  host: "0.0.0.0"
   port: 8000
   ea_auth_token: "KunciAmanSTMA2026"  # Shared secret between Python and EA
   command_poll_interval_seconds: 1

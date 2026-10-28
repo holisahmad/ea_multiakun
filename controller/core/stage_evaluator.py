@@ -46,7 +46,7 @@ def run_stage_evaluation(
     # Auto-complete cycles that have 0 open positions and no pending commands
     from ..database.models import Command
     from .cycle_manager import transition_cycle_state
-    for active_c in db.query(Cycle).filter(Cycle.state.in_(["ACCOUNT_1_ACTIVE", "ACCOUNT_2_ACTIVE", "ACCOUNT_3_ACTIVE", "CLOSING"])).all():
+    for active_c in db.query(Cycle).filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED"])).all():
         pos_cnt = db.query(PositionSnapshot).filter(PositionSnapshot.cycle_id == active_c.id, PositionSnapshot.is_managed == True).count()
         cmd_cnt = db.query(Command).filter(Command.cycle_id == active_c.id, Command.state.in_(["PENDING", "SENT"])).count()
         
