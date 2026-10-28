@@ -442,12 +442,33 @@ async function loadPositions() {
   if (container) {
     container.innerHTML = positions.map(p => {
       const pnl = p.floating_pnl || 0;
-      const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+      const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
       const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
       const dirColor = p.direction === 'BUY' ? 'var(--green)' : 'var(--red)';
 
       const accName = p.account_alias === 'account_1' ? 'Akun 1 (Primary)' : (p.account_alias === 'account_2' ? 'Akun 2 (Secondary)' : 'Akun 3 (Tertiary)');
       const layerText = p.layer ? `Layer ${p.layer}` : 'Stage 1';
+
+      // TP/SL harga absolut (level harga dari broker)
+      const tpPrice = p.tp?.toFixed(2) || null;
+      const slPrice = p.sl?.toFixed(2) || null;
+
+      // Hitung estimasi dollar dari selisih harga vs TP/SL
+      const vol = p.volume || 0.01;
+      let tpStr = '—';
+      let slStr = '—';
+      if (tpPrice && p.open_price) {
+        const tpDiff = Math.abs(p.tp - p.open_price);
+        const tpPoints = Math.round(tpDiff * 10);
+        const tpUsd = (tpDiff * vol * 100).toFixed(2);
+        tpStr = `${tpPrice} <span style="color:var(--text-muted);font-size:9px">(${tpPoints} poin ~$${tpUsd})</span>`;
+      }
+      if (slPrice && p.open_price) {
+        const slDiff = Math.abs(p.sl - p.open_price);
+        const slPoints = Math.round(slDiff * 10);
+        const slUsd = (slDiff * vol * 100).toFixed(2);
+        slStr = `${slPrice} <span style="color:var(--text-muted);font-size:9px">(${slPoints} poin ~$${slUsd})</span>`;
+      }
 
       return `
       <div class="pos-card-mobile">
@@ -467,11 +488,11 @@ async function loadPositions() {
           </div>
           <div>
             <div class="pos-cell-lbl">Take Profit</div>
-            <div class="pos-cell-data">${p.tp?.toFixed(2) || '—'}</div>
+            <div class="pos-cell-data" style="color:var(--green)">${tpStr}</div>
           </div>
           <div>
             <div class="pos-cell-lbl">Stop Loss</div>
-            <div class="pos-cell-data">${p.sl?.toFixed(2) || '—'}</div>
+            <div class="pos-cell-data" style="color:var(--red)">${slStr}</div>
           </div>
           <div>
             <div class="pos-cell-lbl">Floating P/L</div>
@@ -523,20 +544,34 @@ function renderTradeHistoryPage() {
 
     const timeStr = t.recorded_at ? new Date(t.recorded_at).toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }) + ' WIB' : '—';
 
+    // Konversi poin ke estimasi dollar
+    const vol = t.volume || 0.01;
+    const tpPts = t.tp_points || 0;
+    const slPts = t.sl_points || 0;
+    const tpUsd = tpPts > 0 ? ((tpPts / 10) * vol).toFixed(2) : null;
+    const slUsd = slPts > 0 ? ((slPts / 10) * vol).toFixed(2) : null;
+    const tpStr = tpPts > 0
+      ? `<span style="color:var(--green)">${tpPts} poin</span>&nbsp;<span style="color:var(--text-muted);font-size:9px">(~$${tpUsd})</span>`
+      : '<span style="color:var(--text-muted)">Tanpa TP</span>';
+    const slStr = slPts > 0
+      ? `<span style="color:var(--red)">${slPts} poin</span>&nbsp;<span style="color:var(--text-muted);font-size:9px">(~$${slUsd})</span>`
+      : '<span style="color:var(--text-muted)">Tanpa SL</span>';
+
     return `
     <div class="trade-hist-card">
       <div class="trade-hist-top">
-        <div style="display:flex;align-items:center;gap:6px">
+        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
           ${sourcePill}
           <span style="font-weight:700;font-size:13px">${t.account_name}</span>
           <span class="dir-badge ${dirClass}">${t.direction}</span>
-          <span>${t.volume} lot</span>
+          <span>${vol} lot</span>
         </div>
         <span class="status-pill-accepted">✓ ${t.retcode_desc}</span>
       </div>
       <div class="trade-hist-meta">
-        <div><strong>Harga:</strong> ${t.executed_price?.toFixed(2) || '—'}</div>
-        <div><strong>TP/SL:</strong> ${t.tp_points || '—'} / ${t.sl_points || '—'}</div>
+        <div><strong>Harga Eksekusi:</strong> ${t.executed_price?.toFixed(2) || '—'}</div>
+        <div><strong>Take Profit:</strong> ${tpStr}</div>
+        <div><strong>Stop Loss:</strong> ${slStr}</div>
         <div><strong>Tiket Deal:</strong> #${t.deal_ticket || t.order_ticket || '—'}</div>
       </div>
       <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-muted)">
