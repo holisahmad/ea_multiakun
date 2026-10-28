@@ -156,15 +156,37 @@ def _make_command(
     """Create and persist a pending command. Does NOT dispatch it."""
     now = _utcnow()
     cmd_symbol = account.symbol or cycle.symbol
+
+    # Check for custom tp/sl/volume overrides from signal payload
+    custom_tp = None
+    custom_sl = None
+    custom_vol = None
+    if cycle and cycle.signal and cycle.signal.payload_json:
+        try:
+            sig_payload = json.loads(cycle.signal.payload_json)
+            if isinstance(sig_payload, dict):
+                if "tp_points" in sig_payload and sig_payload["tp_points"] is not None:
+                    custom_tp = int(sig_payload["tp_points"])
+                if "sl_points" in sig_payload and sig_payload["sl_points"] is not None:
+                    custom_sl = int(sig_payload["sl_points"])
+                if "volume" in sig_payload and sig_payload["volume"] is not None:
+                    custom_vol = float(sig_payload["volume"])
+        except Exception:
+            pass
+
+    final_tp = custom_tp if custom_tp is not None else (cfg.strategy.individual_tp_points if cfg.strategy.tp_mode == "individual" else None)
+    final_sl = custom_sl if custom_sl is not None else (cfg.strategy.individual_sl_points if cfg.strategy.individual_sl_enabled else None)
+    final_vol = custom_vol if custom_vol is not None and custom_vol > 0 else account.default_lot
+
     cmd = Command(
         cycle_id=cycle.id,
         account_alias=account.alias,
         action=action,
         layer=layer,
         symbol=cmd_symbol,
-        volume=account.default_lot,
-        tp_points=cfg.strategy.individual_tp_points if cfg.strategy.tp_mode == "individual" else None,
-        sl_points=cfg.strategy.individual_sl_points if cfg.strategy.individual_sl_enabled else None,
+        volume=final_vol,
+        tp_points=final_tp,
+        sl_points=final_sl,
         state="PENDING",
         created_at=now,
         expires_at=now + timedelta(seconds=cfg.server.max_command_age_seconds),
@@ -175,9 +197,9 @@ def _make_command(
             "action": action,
             "layer": layer,
             "symbol": cmd_symbol,
-            "volume": account.default_lot,
-            "tp_points": cfg.strategy.individual_tp_points,
-            "sl_points": cfg.strategy.individual_sl_points if cfg.strategy.individual_sl_enabled else None,
+            "volume": final_vol,
+            "tp_points": final_tp or 0,
+            "sl_points": final_sl or 0,
             "deviation_points": cfg.strategy.deviation_points,
             "magic_number": account.magic_number,
             "created_at_utc": now.isoformat(),

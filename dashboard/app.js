@@ -334,10 +334,12 @@ async function loadPositions() {
   const countBadge = document.getElementById('posCount');
   const barPos = document.getElementById('barPositions');
   const navBadge = document.getElementById('navTradeBadge');
+  const btnCloseAll = document.getElementById('btnCloseAllPos');
 
   if (countBadge) countBadge.textContent = positions.length;
   if (barPos) barPos.textContent = positions.length;
   if (navBadge) navBadge.textContent = positions.length;
+  if (btnCloseAll) btnCloseAll.style.display = positions.length > 0 ? 'inline-block' : 'none';
 
   if (!positions.length) {
     if (container) container.innerHTML = '<div class="empty-state">Tidak ada posisi terbuka</div>';
@@ -379,6 +381,9 @@ async function loadPositions() {
             <div class="pos-cell-data ${pnlClass}">${pnlStr}</div>
           </div>
         </div>
+        <button class="btn-pos-close" onclick="closePosition('${p.account_alias}', '${p.cycle_id || ''}')">
+          ✕ Tutup Posisi Ini
+        </button>
       </div>`;
     }).join('');
   }
@@ -553,19 +558,63 @@ async function executeControl(action, target, confirm, label) {
   }
 }
 
+// ── Close Positions Controls ──────────────────────────────
+function closeAllPositions() {
+  showModal(
+    '⚠️',
+    'Tutup Semua Posisi Terbuka',
+    'PERINGATAN: Perintah CLOSE akan segera dikirim ke semua terminal MT5 untuk menutup SEMUA posisi terbuka.\n\nLanjutkan penutupan semua posisi?',
+    async () => {
+      await executeControl('CLOSE_ALL_POSITIONS', null, true, 'Tutup Semua Posisi');
+    }
+  );
+  const btn = document.getElementById('modalConfirmBtn');
+  if (btn) btn.style.background = 'var(--red)';
+}
+
+function closePosition(alias, cycleId) {
+  const title = cycleId ? `Tutup Posisi Siklus (${cycleId.slice(0, 8)}…)` : `Tutup Posisi ${alias}`;
+  showModal(
+    '✕',
+    'Konfirmasi Tutup Posisi',
+    `Kirim perintah penutupan posisi pada akun [${alias}] sekarang?`,
+    async () => {
+      if (cycleId) {
+        await executeControl('CLOSE_CYCLE', cycleId, true, `Tutup Posisi ${alias}`);
+      } else {
+        await executeControl('CLOSE_ALL_POSITIONS', null, true, `Tutup Posisi ${alias}`);
+      }
+    }
+  );
+  const btn = document.getElementById('modalConfirmBtn');
+  if (btn) btn.style.background = 'var(--red)';
+}
+
 // ── Manual Order Entry ─────────────────────────────────────
-async function sendManualOrder(direction) {
+async function sendManualOrder(direction, prefix = 'order') {
   const dir = direction.toUpperCase();
   const icon = dir === 'BUY' ? '🟢' : '🔴';
   const color = dir === 'BUY' ? 'var(--green)' : 'var(--red)';
 
+  // Ambil parameter dari input form
+  const lotInput = document.getElementById(prefix + 'LotInput');
+  const tpInput  = document.getElementById(prefix + 'TpInput');
+  const slInput  = document.getElementById(prefix + 'SlInput');
+
+  const volume = lotInput ? Math.max(0.01, parseFloat(lotInput.value) || 0.01) : 0.01;
+  const tpPoints = tpInput && tpInput.value !== '' ? parseInt(tpInput.value, 10) : 300;
+  const slPoints = slInput && slInput.value !== '' ? parseInt(slInput.value, 10) : 500;
+
+  const tpDesc = tpPoints > 0 ? `${tpPoints} Poin (${tpPoints / 10} pips)` : 'Tanpa TP';
+  const slDesc = slPoints > 0 ? `${slPoints} Poin (${slPoints / 10} pips)` : 'Tanpa SL';
+
   showModal(
     icon,
     `Konfirmasi Manual ${dir} Order`,
-    `Eksekusi order ${dir} XAUUSD pada Akun 1 (Primary):\n\n• Simbol: XAUUSD\n• Volume: 0.01 Lot\n• Take Profit: 300 Poin (30 pips)\n• Stop Loss: 500 Poin (50 pips)\n\nLanjutkan eksekusi ke broker?`,
+    `Eksekusi order ${dir} XAUUSD pada Akun 1 (Primary):\n\n• Simbol: XAUUSD\n• Volume: ${volume.toFixed(2)} Lot\n• Take Profit: ${tpDesc}\n• Stop Loss: ${slDesc}\n\nLanjutkan eksekusi ke broker?`,
     async () => {
       try {
-        toast(`Mengirim order ${dir} XAUUSD...`, 'info');
+        toast(`Mengirim order ${dir} ${volume} lot...`, 'info');
         const res = await apiFetch('/signal', {
           method: 'POST',
           body: JSON.stringify({
@@ -573,7 +622,12 @@ async function sendManualOrder(direction) {
             symbol: 'XAUUSD',
             direction: dir,
             source: 'dashboard-manual',
-            price: null
+            price: null,
+            payload: {
+              volume: volume,
+              tp_points: tpPoints > 0 ? tpPoints : null,
+              sl_points: slPoints > 0 ? slPoints : null,
+            }
           }),
         });
 

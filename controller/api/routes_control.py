@@ -13,9 +13,9 @@ from sqlalchemy.orm import Session
 
 from ..config import STMAConfig, get_config
 from ..database.db import get_db
-from ..database.models import Cycle, RiskEvent, AccountStatus
+from ..database.models import Cycle, RiskEvent, AccountStatus, PositionSnapshot, Command
 from ..core.schemas import OperatorAction, OperatorActionResponse
-from ..core.cycle_manager import initiate_close, transition_cycle_state
+from ..core.cycle_manager import initiate_close, transition_cycle_state, _make_command
 from ..core.risk_engine import trigger_protection
 
 logger = logging.getLogger(__name__)
@@ -97,6 +97,65 @@ def operator_action(
         return OperatorActionResponse(
             ok=True,
             message=f"Close initiated for cycle {cycle_id}. {len(cmds)} close command(s) queued.",
+            action=action,
+        )
+
+    # -----------------------------------------------------------------------
+    # CLOSE_ALL_POSITIONS
+    # -----------------------------------------------------------------------
+    if action == "CLOSE_ALL_POSITIONS":
+        if not body.confirm:
+            raise HTTPException(
+                status_code=400,
+                detail="CLOSE_ALL_POSITIONS requires confirm=true.",
+            )
+        active_cycles = (
+            db.query(Cycle)
+            .filter(Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR", "CANCELLED"]))
+            .all()
+        )
+        total_cmds = 0
+        for c in active_cycles:
+            cmds = initiate_close(db, cfg, c, reason="operator_close_all_request")
+            total_cmds += len(cmds)
+
+        # Also ensure any account with open managed positions receives a CLOSE_ALL_CYCLE command
+        default_cycle = active_cycles[0] if active_cycles else None
+        if not default_cycle:
+            # Look up cycle from any managed position snapshot
+            pos_with_cycle = db.query(PositionSnapshot).filter(PositionSnapshot.is_managed == True, PositionSnapshot.cycle_id.isnot(None)).first()
+            if pos_with_cycle:
+                default_cycle = db.query(Cycle).filter(Cycle.id == pos_with_cycle.cycle_id).first()
+
+        for account in cfg.accounts:
+            if not account.enabled:
+                continue
+            has_pos = (
+                db.query(PositionSnapshot)
+                .filter(
+                    PositionSnapshot.account_alias == account.alias,
+                    PositionSnapshot.is_managed == True,
+                )
+                .first()
+            )
+            if has_pos and default_cycle:
+                pending_cmd = (
+                    db.query(Command)
+                    .filter(
+                        Command.account_alias == account.alias,
+                        Command.action == "CLOSE_ALL_CYCLE",
+                        Command.state == "PENDING",
+                    )
+                    .first()
+                )
+                if not pending_cmd:
+                    _make_command(db, cfg, default_cycle, account, "CLOSE_ALL_CYCLE", layer=0)
+                    total_cmds += 1
+
+        logger.warning("OPERATOR: Close all positions initiated | commands_queued=%d", total_cmds)
+        return OperatorActionResponse(
+            ok=True,
+            message=f"Tutup semua posisi diinisiasi. {total_cmds} perintah dikirim ke EA MT5.",
             action=action,
         )
 
