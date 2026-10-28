@@ -557,6 +557,23 @@ function renderTradeHistoryPage() {
       ? `<span style="color:var(--red)">${slPts} poin</span>&nbsp;<span style="color:var(--text-muted);font-size:9px">(~$${slUsd})</span>`
       : '<span style="color:var(--text-muted)">Tanpa SL</span>';
 
+    // Badge status profit / loss per trade
+    let pnlBadge = '';
+    let pnlColor = 'var(--text-muted)';
+    if (t.trade_pnl !== null && t.trade_pnl !== undefined) {
+      const pnlVal = t.trade_pnl;
+      pnlColor = pnlVal > 0 ? 'var(--green)' : (pnlVal < 0 ? 'var(--red)' : 'var(--text-muted)');
+      const pnlStr = (pnlVal >= 0 ? '+$' : '-$') + Math.abs(pnlVal).toFixed(2);
+      const tagText = t.is_closed ? 'REALIZED' : 'FLOAT';
+      pnlBadge = `<span style="font-weight:800;font-size:11px;color:${pnlColor};background:rgba(0,0,0,0.4);padding:2px 8px;border-radius:4px;border:1px solid ${pnlColor}55">${tagText} ${pnlStr}</span>`;
+    } else if (t.is_closed) {
+      pnlBadge = '<span class="status-pill status-pill-offline" style="font-size:10px">CLOSED</span>';
+    }
+
+    const pnlLine = t.trade_pnl !== null && t.trade_pnl !== undefined
+      ? `<div><strong>Hasil PnL:</strong> <span style="font-weight:700;color:${pnlColor}">${(t.trade_pnl >= 0 ? '+$' : '-$') + Math.abs(t.trade_pnl).toFixed(2)} USD</span></div>`
+      : `<div><strong>Status:</strong> ${t.is_closed ? 'Ditutup' : 'Eksekusi Berhasil'}</div>`;
+
     return `
     <div class="trade-hist-card">
       <div class="trade-hist-top">
@@ -566,10 +583,14 @@ function renderTradeHistoryPage() {
           <span class="dir-badge ${dirClass}">${t.direction}</span>
           <span>${vol} lot</span>
         </div>
-        <span class="status-pill-accepted">✓ ${t.retcode_desc}</span>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${pnlBadge}
+          <span class="status-pill-accepted">✓ ${t.retcode_desc}</span>
+        </div>
       </div>
       <div class="trade-hist-meta">
         <div><strong>Harga Eksekusi:</strong> ${t.executed_price?.toFixed(2) || '—'}</div>
+        ${pnlLine}
         <div><strong>Take Profit:</strong> ${tpStr}</div>
         <div><strong>Stop Loss:</strong> ${slStr}</div>
         <div><strong>Tiket Deal:</strong> #${t.deal_ticket || t.order_ticket || '—'}</div>

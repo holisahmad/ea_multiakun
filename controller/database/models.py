@@ -182,6 +182,27 @@ class PositionSnapshot(Base):
 
 
 # ---------------------------------------------------------------------------
+# closed_trades (audit of every closed trade with realized P/L)
+# ---------------------------------------------------------------------------
+class ClosedTrade(Base):
+    __tablename__ = "closed_trades"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    cycle_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    account_alias: Mapped[str] = mapped_column(String(64))
+    position_ticket: Mapped[int] = mapped_column(Integer, index=True)
+    symbol: Mapped[str] = mapped_column(String(32))
+    direction: Mapped[str] = mapped_column(String(8))
+    volume: Mapped[float] = mapped_column(Float)
+    open_price: Mapped[float] = mapped_column(Float)
+    close_price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
+    close_reason: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    opened_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    closed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+# ---------------------------------------------------------------------------
 # risk_events
 # ---------------------------------------------------------------------------
 class RiskEvent(Base):

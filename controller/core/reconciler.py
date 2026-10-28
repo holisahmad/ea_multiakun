@@ -19,6 +19,7 @@ from ..database.models import (
     Command,
     SystemEvent,
     RiskEvent,
+    ClosedTrade,
 )
 from .risk_engine import trigger_protection
 
@@ -117,12 +118,42 @@ def upsert_positions(
                     "Position %d on %s no longer reported — assumed closed",
                     ticket, account_alias,
                 )
+                closed_pnl = snap.floating_pnl or 0.0
                 if snap.cycle_id:
                     affected_cycle_ids.add(snap.cycle_id)
                     cy = db.query(Cycle).filter(Cycle.id == snap.cycle_id).first()
                     if cy:
-                        cy.realized_pnl_usd = round((cy.realized_pnl_usd or 0.0) + (snap.floating_pnl or 0.0), 2)
+                        cy.realized_pnl_usd = round((cy.realized_pnl_usd or 0.0) + closed_pnl, 2)
                         db.add(cy)
+
+                # Simpan log permanen tiap trade yang selesai (ClosedTrade)
+                closed_record = ClosedTrade(
+                    cycle_id=snap.cycle_id,
+                    account_alias=account_alias,
+                    position_ticket=ticket,
+                    symbol=snap.symbol,
+                    direction=snap.direction,
+                    volume=snap.volume,
+                    open_price=snap.open_price,
+                    close_price=snap.current_price or snap.open_price,
+                    realized_pnl=round(closed_pnl, 2),
+                    close_reason="CLOSED_BY_BROKER",
+                    opened_at=snap.last_seen,
+                    closed_at=_utcnow(),
+                )
+                db.add(closed_record)
+
+                # Catat SystemEvent log agar muncul di tab log aktivitas
+                acc_name = "Akun 1 (Primary)" if account_alias == "account_1" else ("Akun 2 (Secondary)" if account_alias == "account_2" else "Akun 3 (Tertiary)")
+                pnl_str = f"+${closed_pnl:.2f}" if closed_pnl >= 0 else f"-${abs(closed_pnl):.2f}"
+                sys_evt = SystemEvent(
+                    account_alias=account_alias,
+                    event_type="TRADE_CLOSED",
+                    detail=f"{acc_name}: Posisi #{ticket} ({snap.direction} {snap.volume} lot) telah DITUTUP | Realized PnL: {pnl_str} USD",
+                    created_at=_utcnow(),
+                )
+                db.add(sys_evt)
+
             db.delete(snap)
             removed_count += 1
 

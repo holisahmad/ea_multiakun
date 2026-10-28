@@ -21,6 +21,7 @@ from ..database.models import (
     SystemEvent,
     Execution,
     Signal,
+    ClosedTrade,
 )
 from ..core.schemas import (
     AccountSummary,
@@ -303,6 +304,31 @@ def get_trades_history(
         action = cmd.action if cmd else "UNKNOWN"
         direction = "BUY" if "BUY" in action else ("SELL" if "SELL" in action else "CLOSE")
 
+        # Cek apakah posisi ini sudah ditutup dan memiliki rekaman profit/loss
+        trade_pnl = None
+        is_closed = None
+        close_price = None
+        closed_at = None
+
+        if e.order_ticket:
+            ct = db.query(ClosedTrade).filter(
+                (ClosedTrade.position_ticket == e.order_ticket) | 
+                (ClosedTrade.position_ticket == e.deal_ticket)
+            ).first()
+            if ct:
+                trade_pnl = ct.realized_pnl
+                is_closed = True
+                close_price = ct.close_price
+                closed_at = ct.closed_at.isoformat()
+            else:
+                snap = db.query(PositionSnapshot).filter(PositionSnapshot.position_ticket == e.order_ticket).first()
+                if snap:
+                    trade_pnl = snap.floating_pnl
+                    is_closed = False
+                    close_price = snap.current_price
+                elif "CLOSE" in action:
+                    is_closed = True
+
         result.append({
             "id": e.id,
             "account_alias": e.account_alias,
@@ -322,6 +348,10 @@ def get_trades_history(
             "retcode_desc": "Berhasil (Done)" if e.retcode == 10009 else f"Kode {e.retcode}",
             "source_type": source_type,
             "source_raw": sig.source if sig else "manual",
+            "trade_pnl": trade_pnl,
+            "is_closed": is_closed,
+            "close_price": close_price,
+            "closed_at": closed_at,
             "recorded_at": e.recorded_at.isoformat() if e.recorded_at else None,
         })
     return result
