@@ -9,8 +9,16 @@ __pycache__
 .venv
 env/
 venv/
-*.sqlite3-journal
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+*.sqlite*
 tests/
 scratch/
 browser/
 *.log
+SMART_TRADE_MULTI_ACCOUNT_AI_AGENT_SPEC*
+*AI_AGENT_SPEC*
+.agents/
+.gemini/
