@@ -126,7 +126,14 @@ def check_account_risk(
         result.warn(f"[{alias}] max_floating_loss_per_account_usd not configured")
 
     # 5. Margin level
-    if risk.min_margin_level_pct is not None and status.margin_level_pct is not None:
+    # Note: In MT5, margin level is 0.0 when no positions are open (zero margin used).
+    # Only enforce min_margin_level_pct when there are active positions and margin is used.
+    if (
+        risk.min_margin_level_pct is not None
+        and status.margin_level_pct is not None
+        and status.open_positions > 0
+        and status.margin_level_pct > 0
+    ):
         if status.margin_level_pct < risk.min_margin_level_pct:
             result.deny(
                 f"[{alias}] Margin level too low: "
