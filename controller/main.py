@@ -161,8 +161,15 @@ if os.path.exists(dashboard_dir):
 
 
 # ---------------------------------------------------------------------------
-# Health check
+# Health check & Favicon
 # ---------------------------------------------------------------------------
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    """Return empty 204 for favicon to keep browser console clean."""
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 @app.get("/health", tags=["system"])
 def health_check():
     """Basic health check endpoint."""
