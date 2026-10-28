@@ -38,11 +38,29 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 # ---------------------------------------------------------------------------
-# Table creation
+# Table creation & Auto-Migration
 # ---------------------------------------------------------------------------
 def init_db() -> None:
-    """Create all tables if they don't exist yet."""
+    """Create all tables and auto-migrate missing columns for existing SQLite tables."""
     Base.metadata.create_all(bind=engine)
+
+    # Auto-add missing columns to existing SQLite tables if models have new fields
+    import sqlite3
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cur = conn.cursor()
+        for table_name, table in Base.metadata.tables.items():
+            cur.execute(f"PRAGMA table_info({table_name});")
+            db_cols = {row[1] for row in cur.fetchall()}
+            for col in table.columns:
+                if col.name not in db_cols:
+                    col_type = str(col.type)
+                    cur.execute(f"ALTER TABLE {table_name} ADD COLUMN {col.name} {col_type};")
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("SQLite auto-migration notice: %s", e)
 
 
 # ---------------------------------------------------------------------------
