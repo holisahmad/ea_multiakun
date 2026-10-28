@@ -247,6 +247,8 @@ def get_recent_commands(
             "action": c.action,
             "state": c.state,
             "volume": c.volume,
+            "tp_points": c.tp_points,
+            "sl_points": c.sl_points,
             "layer": c.layer,
             "created_at": c.created_at.isoformat() if c.created_at else None,
         }

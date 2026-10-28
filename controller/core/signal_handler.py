@@ -89,7 +89,12 @@ def validate_and_store_signal(
             .filter(
                 Cycle.strategy_id == strategy_id,
                 Cycle.symbol == symbol.upper(),
-                Cycle.state.notin_(["COMPLETED", "FAILED_REQUIRES_OPERATOR"]),
+                Cycle.state.notin_([
+                    "COMPLETED",
+                    "FAILED_REQUIRES_OPERATOR",
+                    "CANCELLED",
+                    "FAILED",
+                ]),
             )
             .first()
         )
