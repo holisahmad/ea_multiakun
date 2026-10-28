@@ -119,6 +119,10 @@ def upsert_positions(
                 )
                 if snap.cycle_id:
                     affected_cycle_ids.add(snap.cycle_id)
+                    cy = db.query(Cycle).filter(Cycle.id == snap.cycle_id).first()
+                    if cy:
+                        cy.realized_pnl_usd = round((cy.realized_pnl_usd or 0.0) + (snap.floating_pnl or 0.0), 2)
+                        db.add(cy)
             db.delete(snap)
             removed_count += 1
 

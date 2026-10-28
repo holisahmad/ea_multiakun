@@ -292,13 +292,18 @@ async function loadAccounts() {
 
   const cardsHtml = accounts.map(acc => {
     const pnl = acc.floating_pnl || 0;
-    const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+    const pnlClass = pnl > 0 ? 'positive' : (pnl < 0 ? 'negative' : '');
     const pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2);
+
+    const realPnl = acc.realized_pnl || 0;
+    const realClass = realPnl > 0 ? 'positive' : (realPnl < 0 ? 'negative' : '');
+    const realStr = (realPnl >= 0 ? '+' : '') + realPnl.toFixed(2);
+
     const balStr = acc.balance != null ? acc.balance.toFixed(2) : '0.00';
     const eqStr  = acc.equity != null ? acc.equity.toFixed(2) : '0.00';
     const mlStr  = acc.margin_level_pct != null ? acc.margin_level_pct.toFixed(0) + '%' : '—';
 
-    const isLiveOnline = acc.connected && !a.is_stale;
+    const isLiveOnline = acc.connected && !acc.is_stale;
     let dotColor = isLiveOnline ? 'var(--green)' : 'var(--red)';
     let statusText = isLiveOnline ? 'Live Connected' : 'MT5 Closed / Offline';
     let statusBadgeClass = isLiveOnline ? 'status-pill-online' : 'status-pill-offline';
@@ -338,6 +343,10 @@ async function loadAccounts() {
         <div class="m-cell">
           <span class="m-cell-label">Float P/L</span>
           <span class="m-cell-val ${pnlClass}">${pnlStr}</span>
+        </div>
+        <div class="m-cell">
+          <span class="m-cell-label">Realized P/L</span>
+          <span class="m-cell-val ${realClass}">$${realStr}</span>
         </div>
         <div class="m-cell">
           <span class="m-cell-label">Margin %</span>
@@ -840,6 +849,97 @@ function closePosition(alias, cycleId) {
   if (btn) btn.style.background = 'var(--red)';
 }
 
+// ── Manual Order TP/SL Unit Handler ────────────────────────
+let g_tpslUnit = 'usd'; // Default 'usd' ($) | 'points'
+
+function setTpSlUnit(unit) {
+  g_tpslUnit = unit;
+  const btnUsd = document.getElementById('btnUnitUsd');
+  const btnPts = document.getElementById('btnUnitPoints');
+  const tpLbl  = document.getElementById('orderTpLbl');
+  const slLbl  = document.getElementById('orderSlLbl');
+  const tpInp  = document.getElementById('orderTpInput');
+  const slInp  = document.getElementById('orderSlInput');
+  const lotInp = document.getElementById('orderLotInput');
+
+  const lot = lotInp ? Math.max(0.01, parseFloat(lotInp.value) || 0.01) : 0.01;
+
+  if (unit === 'usd') {
+    if (btnUsd) btnUsd.classList.add('active');
+    if (btnPts) btnPts.classList.remove('active');
+    if (tpLbl) tpLbl.textContent = 'TP ($ USD)';
+    if (slLbl) slLbl.textContent = 'SL ($ USD)';
+    if (tpInp) {
+      tpInp.step = '0.5';
+      tpInp.placeholder = '3.00';
+      const curVal = parseFloat(tpInp.value);
+      if (curVal > 50) {
+        tpInp.value = ((curVal / 10) * lot).toFixed(2);
+      } else if (!curVal || curVal <= 0) {
+        tpInp.value = '3.00';
+      }
+    }
+    if (slInp) {
+      slInp.step = '0.5';
+      slInp.placeholder = '5.00';
+      const curVal = parseFloat(slInp.value);
+      if (curVal > 50) {
+        slInp.value = ((curVal / 10) * lot).toFixed(2);
+      } else if (!curVal || curVal <= 0) {
+        slInp.value = '5.00';
+      }
+    }
+  } else {
+    if (btnUsd) btnUsd.classList.remove('active');
+    if (btnPts) btnPts.classList.add('active');
+    if (tpLbl) tpLbl.textContent = 'TP (Poin)';
+    if (slLbl) slLbl.textContent = 'SL (Poin)';
+    if (tpInp) {
+      tpInp.step = '100';
+      tpInp.placeholder = '3000';
+      const curVal = parseFloat(tpInp.value);
+      if (curVal > 0 && curVal < 50) {
+        tpInp.value = Math.round((curVal / lot) * 10);
+      } else if (!curVal || curVal <= 0) {
+        tpInp.value = '3000';
+      }
+    }
+    if (slInp) {
+      slInp.step = '100';
+      slInp.placeholder = '5000';
+      const curVal = parseFloat(slInp.value);
+      if (curVal > 0 && curVal < 50) {
+        slInp.value = Math.round((curVal / lot) * 10);
+      } else if (!curVal || curVal <= 0) {
+        slInp.value = '5000';
+      }
+    }
+  }
+  updateTpSlHint();
+}
+
+function updateTpSlHint() {
+  const hintEl = document.getElementById('orderInputHint');
+  const lotInp = document.getElementById('orderLotInput');
+  const tpInp  = document.getElementById('orderTpInput');
+  const slInp  = document.getElementById('orderSlInput');
+  if (!hintEl) return;
+
+  const lot = lotInp ? Math.max(0.01, parseFloat(lotInp.value) || 0.01) : 0.01;
+  const tpVal = tpInp ? parseFloat(tpInp.value) || 0 : 0;
+  const slVal = slInp ? parseFloat(slInp.value) || 0 : 0;
+
+  if (g_tpslUnit === 'usd') {
+    const tpPts = tpVal > 0 ? Math.round((tpVal / lot) * 10) : 0;
+    const slPts = slVal > 0 ? Math.round((slVal / lot) * 10) : 0;
+    hintEl.innerHTML = `💡 <strong>Mode Target Dollar:</strong> TP $${tpVal.toFixed(2)} ≈ ${tpPts.toLocaleString()} poin | SL $${slVal.toFixed(2)} ≈ ${slPts.toLocaleString()} poin pada ${lot.toFixed(2)} lot. (0 = tanpa TP/SL)`;
+  } else {
+    const tpUsd = tpVal > 0 ? ((tpVal / 10) * lot).toFixed(2) : '0.00';
+    const slUsd = slVal > 0 ? ((slVal / 10) * lot).toFixed(2) : '0.00';
+    hintEl.innerHTML = `💡 <strong>Mode Poin Broker:</strong> TP ${tpVal} poin ≈ $${tpUsd} USD | SL ${slVal} poin ≈ $${slUsd} USD pada ${lot.toFixed(2)} lot. (10 poin = 1 pip)`;
+  }
+}
+
 // ── Manual Order Entry ─────────────────────────────────────
 async function sendManualOrder(direction, prefix = 'order') {
   const dir = direction.toUpperCase();
@@ -851,11 +951,35 @@ async function sendManualOrder(direction, prefix = 'order') {
   const slInput  = document.getElementById(prefix + 'SlInput');
 
   const volume = lotInput ? Math.max(0.01, parseFloat(lotInput.value) || 0.01) : 0.01;
-  const tpPoints = tpInput && tpInput.value !== '' ? parseInt(tpInput.value, 10) : 300;
-  const slPoints = slInput && slInput.value !== '' ? parseInt(slInput.value, 10) : 500;
+  const rawTp = tpInput && tpInput.value !== '' ? parseFloat(tpInput.value) : 0;
+  const rawSl = slInput && slInput.value !== '' ? parseFloat(slInput.value) : 0;
 
-  const tpDesc = tpPoints > 0 ? `${tpPoints} Poin (${tpPoints / 10} pips)` : 'Tanpa TP';
-  const slDesc = slPoints > 0 ? `${slPoints} Poin (${slPoints / 10} pips)` : 'Tanpa SL';
+  let tpPoints = 0;
+  let slPoints = 0;
+  let tpDesc = 'Tanpa TP';
+  let slDesc = 'Tanpa SL';
+
+  if (g_tpslUnit === 'usd') {
+    if (rawTp > 0) {
+      tpPoints = Math.round((rawTp / volume) * 10);
+      tpDesc = `$${rawTp.toFixed(2)} USD (${tpPoints.toLocaleString()} Poin)`;
+    }
+    if (rawSl > 0) {
+      slPoints = Math.round((rawSl / volume) * 10);
+      slDesc = `$${rawSl.toFixed(2)} USD (${slPoints.toLocaleString()} Poin)`;
+    }
+  } else {
+    if (rawTp > 0) {
+      tpPoints = parseInt(rawTp, 10);
+      const estUsd = ((tpPoints / 10) * volume).toFixed(2);
+      tpDesc = `${tpPoints} Poin (~$${estUsd} USD)`;
+    }
+    if (rawSl > 0) {
+      slPoints = parseInt(rawSl, 10);
+      const estUsd = ((slPoints / 10) * volume).toFixed(2);
+      slDesc = `${slPoints} Poin (~$${estUsd} USD)`;
+    }
+  }
 
   showModal(
     icon,

@@ -188,6 +188,7 @@ class AccountSummary(BaseModel):
     free_margin: Optional[float]
     margin_level_pct: Optional[float]
     floating_pnl: Optional[float]
+    realized_pnl: Optional[float] = None
     open_positions: int
     currency: str
     is_cent: bool

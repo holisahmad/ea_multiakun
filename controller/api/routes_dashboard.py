@@ -100,15 +100,19 @@ def get_accounts(
 
         is_connected = bool(status and status.connected and not stale)
 
+        bal = account.normalize_amount(status.balance) if status and status.balance is not None else None
+        acc_realized = round(bal - 1000.0, 2) if bal is not None else None
+
         summaries.append(AccountSummary(
             alias=account.alias,
             role=account.role,
             connected=is_connected,
-            balance=account.normalize_amount(status.balance) if status and status.balance is not None else None,
+            balance=bal,
             equity=account.normalize_amount(status.equity) if status and status.equity is not None else None,
             free_margin=account.normalize_amount(status.free_margin) if status and status.free_margin is not None else None,
             margin_level_pct=status.margin_level_pct if status else None,
             floating_pnl=account.normalize_amount(status.floating_pnl) if status and status.floating_pnl is not None else None,
+            realized_pnl=acc_realized,
             open_positions=status.open_positions if status else 0,
             currency=account.currency,
             is_cent=account.is_cent,
@@ -380,14 +384,19 @@ def get_trading_performance(
         .limit(20)
         .all()
     )
-    realized_pnl_today = sum(c.realized_pnl_usd or 0.0 for c in completed_cycles_today)
+    cycle_realized = sum(c.realized_pnl_usd or 0.0 for c in completed_cycles_today)
 
     acc_matrix = []
     total_floating_pnl = 0.0
+    total_balance_delta = 0.0
     for account in cfg.accounts:
         st = db.query(AccountStatus).filter(AccountStatus.account_alias == account.alias).first()
         float_pnl = account.normalize_amount(st.floating_pnl) if st and st.floating_pnl is not None else 0.0
         total_floating_pnl += float_pnl
+
+        bal = account.normalize_amount(st.balance) if st and st.balance is not None else 1000.0
+        acc_realized = round(bal - 1000.0, 2)
+        total_balance_delta += acc_realized
         
         acc_trades_cnt = sum(1 for e in execs_today if e.account_alias == account.alias)
         
@@ -396,13 +405,16 @@ def get_trading_performance(
             "name": "Akun 1 (Primary)" if account.alias == "account_1" else ("Akun 2 (Secondary)" if account.alias == "account_2" else "Akun 3 (Tertiary)"),
             "role": account.role,
             "connected": bool(st and st.connected),
-            "balance": account.normalize_amount(st.balance) if st and st.balance is not None else 0.0,
-            "equity": account.normalize_amount(st.equity) if st and st.equity is not None else 0.0,
-            "floating_pnl": float_pnl,
+            "balance": bal,
+            "equity": account.normalize_amount(st.equity) if st and st.equity is not None else bal,
+            "floating_pnl": round(float_pnl, 2),
+            "realized_pnl": acc_realized,
             "margin_level_pct": st.margin_level_pct if st else 0.0,
             "open_positions": st.open_positions if st else 0,
             "trades_count": acc_trades_cnt,
         })
+
+    realized_pnl_today = cycle_realized if abs(cycle_realized) > 0.001 else total_balance_delta
 
     active_cycles_count = (
         db.query(Cycle)

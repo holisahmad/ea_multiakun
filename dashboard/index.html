@@ -198,24 +198,37 @@
           </div>
           <span class="card-tag tag-cyan">XAUUSD • Stage 1</span>
         </div>
-        <div class="card-subtext">Picu order manual ke Akun Primary dengan custom Lot, Take Profit, dan Stop Loss.</div>
+        <div class="card-subtext">Picu order manual ke Akun Primary dengan custom Lot, Take Profit, dan Stop Loss (Dollar / Poin).</div>
         
+        <!-- TP/SL Unit Selector -->
+        <div class="tpsl-unit-selector">
+          <span class="unit-selector-lbl">Satuan Target TP / SL:</span>
+          <div class="unit-toggle-pills">
+            <button type="button" class="unit-pill-btn active" id="btnUnitUsd" onclick="setTpSlUnit('usd')">
+              <span class="unit-icon">$</span> Dollar ($ USD)
+            </button>
+            <button type="button" class="unit-pill-btn" id="btnUnitPoints" onclick="setTpSlUnit('points')">
+              <span class="unit-icon">#</span> Poin Broker
+            </button>
+          </div>
+        </div>
+
         <!-- Parameter Inputs -->
         <div class="order-inputs-grid">
           <div class="order-input-col">
             <label class="order-input-lbl">Lot Size</label>
-            <input type="number" id="orderLotInput" value="0.01" step="0.01" min="0.01" max="0.03" class="order-num-input">
+            <input type="number" id="orderLotInput" value="0.01" step="0.01" min="0.01" max="0.03" class="order-num-input" oninput="updateTpSlHint()">
           </div>
           <div class="order-input-col">
-            <label class="order-input-lbl">TP (Poin)</label>
-            <input type="number" id="orderTpInput" value="300" step="50" min="0" placeholder="300" class="order-num-input">
+            <label class="order-input-lbl" id="orderTpLbl">TP ($ USD)</label>
+            <input type="number" id="orderTpInput" value="3.00" step="0.5" min="0" placeholder="3.00" class="order-num-input" oninput="updateTpSlHint()">
           </div>
           <div class="order-input-col">
-            <label class="order-input-lbl">SL (Poin)</label>
-            <input type="number" id="orderSlInput" value="500" step="50" min="0" placeholder="500" class="order-num-input">
+            <label class="order-input-lbl" id="orderSlLbl">SL ($ USD)</label>
+            <input type="number" id="orderSlInput" value="5.00" step="0.5" min="0" placeholder="5.00" class="order-num-input" oninput="updateTpSlHint()">
           </div>
         </div>
-        <div class="order-input-hint">💡 10 poin = 1 pip (contoh: TP 300 = 30 pips, SL 500 = 50 pips). Masukkan 0 jika tanpa TP/SL.</div>
+        <div class="order-input-hint" id="orderInputHint">💡 Estimasi: TP $3.00 ≈ 3,000 poin ($3.00 kenaikan harga) | SL $5.00 ≈ 5,000 poin pada 0.01 lot. Masukkan 0 jika tanpa TP/SL.</div>
 
         <div class="manual-order-grid">
           <button class="order-btn order-btn--buy" onclick="sendManualOrder('BUY')">
